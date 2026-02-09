@@ -83,9 +83,14 @@ class MujocoTableRenderMixin():
 
     def close(self):
         if hasattr(self, 'ctx') and self.ctx is not None:
-            self.ctx.free()
+            try:
+                self.ctx.free()
+            except:
+                pass
+            self.ctx = None
         if hasattr(self, 'scn') and self.scn is not None:
-            self.scn.free()
+            # scn cleanup is automatic in newer MuJoCo versions
+            self.scn = None
         if self.window is not None:
             glfw.destroy_window(self.window)
             self.window = None

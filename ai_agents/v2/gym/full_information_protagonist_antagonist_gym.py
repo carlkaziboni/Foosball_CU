@@ -11,9 +11,8 @@ from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
 
 DIRECTION_CHANGE = 1
 TABLE_MAX_Y_DIM = 65
-BALL_STOPPED_COUNT_THRESHOLD = 10
-MAX_STEPS = 40
-SIM_PATH = os.environ.get('SIM_PATH', '/Research/Foosball_CU/foosball_sim/v2/foosball_sim.xml')
+BALL_STOPPED_COUNT_THRESHOLD = 50  # Increased from 10 for longer episodes
+MAX_STEPS = 1000  # Very long episodes for full gameplay
 
 RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 
@@ -23,8 +22,11 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     def __init__(self, antagonist_model=None, play_until_goal=False, verbose_mode=False):
         super(FoosballEnv, self).__init__()
 
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        xml_file = SIM_PATH
+        # Build path to XML file relative to this file's location
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.join(current_file_dir, '..', '..', '..')
+        xml_file = os.path.join(project_root, 'foosball_sim', 'v2', 'foosball_sim.xml')
+        xml_file = os.path.normpath(xml_file)  # Clean up the path
 
         self.model = mujoco.MjModel.from_xml_path(xml_file)
         self.data = mujoco.MjData(self.model)
@@ -72,7 +74,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self._ctrl_cost_weight = 0.005
         self._terminate_when_unhealthy = True
         self._healthy_z_range = (-80, 80)
-        self.max_no_progress_steps = 15
+        self.max_no_progress_steps = 50  # Increased from 15 for longer play
 
         self.prev_ball_y = None
         self.no_progress_steps = 0

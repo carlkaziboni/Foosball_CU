@@ -23,8 +23,11 @@ if __name__ == '__main__':
 
     model_dir = './models'
     log_dir = './logs'
-    total_epochs = 15
-    epoch_timesteps = int(100000)
+    
+    # Training for 1.5 million timesteps
+    total_epochs = 100
+    epoch_timesteps = int(15000)  # 100 epochs × 15,000 = 1.5M timesteps
+    cycle_timesteps = 5000
 
     agent_manager = GenericAgentManager(1, sac_foosball_env_factory, SACFoosballAgent)
     agent_manager.initialize_training_agents()
@@ -37,7 +40,10 @@ if __name__ == '__main__':
 
     # Start training
     if not args.test:
-        engine.train(total_epochs=total_epochs, epoch_timesteps=epoch_timesteps, cycle_timesteps=10000)
+        print(f"Starting training with {total_epochs} epochs, {epoch_timesteps} timesteps per epoch")
+        print(f"Total timesteps: {total_epochs * epoch_timesteps:,}")
+        print("=" * 60)
+        engine.train(total_epochs=total_epochs, epoch_timesteps=epoch_timesteps, cycle_timesteps=cycle_timesteps)
 
     # Test the trained agent
     engine.test()
