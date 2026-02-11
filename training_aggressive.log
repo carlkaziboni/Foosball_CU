@@ -1,0 +1,67 @@
+/Users/carlkaziboni/anaconda3/lib/python3.12/site-packages/gymnasium/spaces/box.py:235: UserWarning: [33mWARN: Box low's precision lowered by casting to float32, current low.dtype=float64[0m
+  gym.logger.warn(
+/Users/carlkaziboni/anaconda3/lib/python3.12/site-packages/gymnasium/spaces/box.py:305: UserWarning: [33mWARN: Box high's precision lowered by casting to float32, current high.dtype=float64[0m
+  gym.logger.warn(
+/Users/carlkaziboni/anaconda3/lib/python3.12/site-packages/gymnasium/spaces/box.py:235: UserWarning: [33mWARN: Box low's precision lowered by casting to float32, current low.dtype=float64[0m
+  gym.logger.warn(
+/Users/carlkaziboni/anaconda3/lib/python3.12/site-packages/gymnasium/spaces/box.py:305: UserWarning: [33mWARN: Box high's precision lowered by casting to float32, current high.dtype=float64[0m
+  gym.logger.warn(
+✓ Agent 0 using Apple Silicon GPU (MPS) for training
+Agent 0 could not load model. Initializing new model.
+Using mps device
+Wrapping the env in a DummyVecEnv.
+Agent 0 initialized.
+✓ Agent 0 using Apple Silicon GPU (MPS) for training
+Frozen agent 0 using current training agent (no saved model)
+Starting overnight training (~12 hours)
+Configuration: 10 epochs × 2000 timesteps = 20,000 total timesteps
+============================================================
+
+============================================================
+Starting epoch 1/10
+Training for 2000 timesteps
+Total timesteps so far: 0
+============================================================
+
+✓ Agent 0 using Apple Silicon GPU (MPS) for training
+Frozen agent 0 using current training agent (no saved model)
+Wrapping the env in a DummyVecEnv.
+Agent 0 starting learning for 2000 timesteps...
+TensorBoard logs: ./logs/sac_agent_0/run_0
+---------------------------------
+| replay/            |          |
+|    buffer_size     | 499      |
+| rollout/           |          |
+|    ep_len_mean     | 50       |
+|    ep_rew_mean     | -121     |
+| time/              |          |
+|    episodes        | 10       |
+|    fps             | 290      |
+|    time_elapsed    | 1        |
+|    total_timesteps | 500      |
+| train/             |          |
+|    learning_rate   | 0.001    |
+|    std             | 0.0498   |
+---------------------------------
+---------------------------------
+| replay/            |          |
+|    buffer_size     | 999      |
+| rollout/           |          |
+|    ep_len_mean     | 50       |
+|    ep_rew_mean     | -111     |
+| time/              |          |
+|    episodes        | 20       |
+|    fps             | 3        |
+|    time_elapsed    | 324      |
+|    total_timesteps | 1000     |
+| train/             |          |
+|    actor_loss      | -407     |
+|    critic_loss     | 2.67e+03 |
+|    ent_coef        | 0.314    |
+|    ent_coef_loss   | -251     |
+|    learning_rate   | 0.001    |
+|    n_updates       | 998      |
+|    std             | 0.059    |
+---------------------------------
+/Users/carlkaziboni/anaconda3/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

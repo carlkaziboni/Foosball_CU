@@ -32,10 +32,29 @@ class SACFoosballAgent(FoosballAgent):
     def initialize_agent(self):
         try:
             self.load()
+            print(f"Agent {self.id} initialized from saved model.")
         except Exception as e:
             print(f"Agent {self.id} could not load model. Initializing new model.")
-            self.model = SAC('MlpPolicy', self.env, policy_kwargs=self.policy_kwargs, device='cuda', buffer_size=1000000)
-        print(f"Agent {self.id} initialized.")
+            self.model = SAC(
+                'MlpPolicy', 
+                self.env, 
+                policy_kwargs=self.policy_kwargs, 
+                device=self.device,
+                learning_rate=0.001,              # 3x higher for faster learning
+                buffer_size=50000,                # Smaller for faster learning
+                learning_starts=500,              # Start learning earlier
+                batch_size=128,                   # Smaller batches
+                tau=0.01,                         # Faster target updates
+                gamma=0.95,                       # Less long-term focus
+                train_freq=1,                     # Train every step
+                gradient_steps=2,                 # More updates per step
+                ent_coef='auto',                  # Auto-tune exploration
+                target_entropy='auto',
+                use_sde=True,                     # State-dependent exploration
+                sde_sample_freq=4,
+                verbose=1
+            )
+            print(f"Agent {self.id} initialized.")
 
     def predict(self, observation, deterministic=False):
         if self.model is None:
@@ -46,13 +65,24 @@ class SACFoosballAgent(FoosballAgent):
     def learn(self, total_timesteps):
         if self.model is None:
             # Enable TensorBoard logging with descriptive name
-            tensorboard_log = f"./tensorboard_logs/sac_agent_{self.id}"
+            tensorboard_log = f"./logs/sac_agent_{self.id}"
             self.model = SAC(
                 'MlpPolicy', 
                 self.env, 
                 policy_kwargs=self.policy_kwargs, 
-                device=self.device, 
-                buffer_size=1000000,
+                device=self.device,
+                learning_rate=0.001,              # 3x higher for faster learning
+                buffer_size=50000,                # Smaller for faster learning
+                learning_starts=500,              # Start learning earlier
+                batch_size=128,                   # Smaller batches
+                tau=0.01,                         # Faster target updates
+                gamma=0.95,                       # Less long-term focus
+                train_freq=1,                     # Train every step
+                gradient_steps=2,                 # More updates per step
+                ent_coef='auto',                  # Auto-tune exploration
+                target_entropy='auto',
+                use_sde=True,                     # State-dependent exploration
+                sde_sample_freq=4,
                 tensorboard_log=tensorboard_log,
                 verbose=1
             )
@@ -60,7 +90,7 @@ class SACFoosballAgent(FoosballAgent):
         callback = self.create_callback(self.env)
         tb_log_name = f'run_{self.id}'
         print(f"Agent {self.id} starting learning for {total_timesteps} timesteps...")
-        print(f"TensorBoard logs: ./tensorboard_logs/sac_agent_{self.id}/{tb_log_name}")
+        print(f"TensorBoard logs: ./logs/sac_agent_{self.id}/{tb_log_name}")
         self.model.learn(
             total_timesteps=total_timesteps, 
             callback=callback, 
@@ -76,7 +106,7 @@ class SACFoosballAgent(FoosballAgent):
             env,
             best_model_save_path=self.id_subdir + '/sac/best_model',
             log_path=self.log_dir,
-            eval_freq=5000,
+            eval_freq=3000,  # Evaluate every 3k steps (6 times total)
             n_eval_episodes=3,
             render=False,
             deterministic=True,
@@ -95,7 +125,10 @@ class SACFoosballAgent(FoosballAgent):
         return callback_list
 
     def save(self):
-        self.model.save(self.id_subdir + '/sac/best_model')
+        import os
+        save_path = self.id_subdir + '/sac/best_model'
+        os.makedirs(save_path, exist_ok=True)
+        self.model.save(save_path + '/model')
     
     def save_checkpoint(self, path):
         """Save model to a specific checkpoint path"""
@@ -105,8 +138,14 @@ class SACFoosballAgent(FoosballAgent):
         print(f"  Checkpoint saved to: {path}/model.zip")
 
     def load(self):
-        self.model = SAC.load(self.id_subdir + '/sac/best_model/best_model.zip')
-        print(f"Agent {self.id} loaded model from {self.id_subdir}/sac/best_model/best_model.zip")
+        import os
+        # Try the correct path first
+        model_path = self.id_subdir + '/sac/best_model/model.zip'
+        if not os.path.exists(model_path):
+            # Fallback to old path for backwards compatibility
+            model_path = self.id_subdir + '/sac/best_model/best_model.zip'
+        self.model = SAC.load(model_path, env=self.env)
+        print(f"Agent {self.id} loaded model from {model_path}")
 
     def change_env(self, env):
         self.env = env

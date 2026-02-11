@@ -224,20 +224,78 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
     def compute_reward(self, protagonist_action):
         ball_obs = self._get_ball_obs()
-        ball_y = ball_obs[0][1]
-        ball_x = ball_obs[0][0]
+        ball_pos = ball_obs[0]
+        ball_vel = ball_obs[1]
+        ball_y = ball_pos[1]
+        ball_x = ball_pos[0]
+        ball_z = ball_pos[2]
+        
+        # Calculate ball speed
+        ball_speed = np.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
 
-        inverse_distance_to_goal = 300 - self.euclidean_goal_distance(ball_x, ball_y)
-
-        if ball_y >  TABLE_MAX_Y_DIM:
-            inverse_distance_to_goal = 0
-
-        ctrl_cost = self.control_cost(protagonist_action)
-
+        # PRIMARY REWARDS: Goals (dominant - keep these large)
         victory = 1000 * DIRECTION_CHANGE if ball_y >  TABLE_MAX_Y_DIM else 0  # Ball in antagonist's goal
         loss = -1000 * DIRECTION_CHANGE if ball_y < -1.0 * TABLE_MAX_Y_DIM else 0  # Ball in protagonist's goal
 
-        reward = loss + victory + inverse_distance_to_goal
+        # CURRICULUM LEARNING REWARDS: Help agent learn to interact with ball
+        
+        # 1. CONTACT REWARDS: Reward for getting foosmen near the ball
+        contact_reward = 0.0
+        ball_pos_2d = np.array([ball_x, ball_y, ball_z])
+        
+        # Check protagonist's foosmen (yellow team)
+        for rod in RODS:
+            rod_name = f"y{rod}rod"
+            # Get positions of guys on this rod
+            for guy_num in range(1, 6):  # Max 5 guys per rod
+                guy_name = f"y{rod}guy{guy_num}"
+                try:
+                    guy_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, guy_name)
+                    guy_pos = self.data.body(guy_body_id).xpos.copy()
+                    distance = np.linalg.norm(ball_pos_2d - guy_pos)
+                    
+                    # Reward proximity (decays with distance) - MASSIVELY INCREASED
+                    if distance < 10.0:
+                        contact_reward += 50.0 / (distance + 1.0)  # Was 5.0
+                    
+                    # Large reward for very close contact (likely hit) - MASSIVELY INCREASED
+                    if distance < 3.0:
+                        contact_reward += 200.0  # Was 20.0
+                except:
+                    continue  # Guy doesn't exist on this rod
+        
+        # 2. BALL MOVEMENT REWARDS: Reward making the ball move - MASSIVELY INCREASED
+        movement_reward = 0.0
+        if ball_speed > 0.1:
+            movement_reward += ball_speed * 10.0  # Was 2.0 - Reward ball speed
+        
+        # Extra reward for ball being active
+        if ball_speed > 0.5:
+            movement_reward += 50.0  # Was 10.0
+        
+        # 3. DIRECTIONAL REWARDS: Reward ball moving toward opponent goal - MASSIVELY INCREASED
+        directional_reward = 0.0
+        if ball_vel[1] > 0:  # Moving toward opponent (positive Y)
+            directional_reward += ball_vel[1] * 25.0  # Was 5.0
+            # Extra bonus if moving fast in right direction
+            if ball_vel[1] > 2.0:
+                directional_reward += 75.0  # Was 15.0
+        
+        # 4. POSITION REWARDS: Small rewards for ball position (only when moving)
+        position_reward = 0
+        if ball_speed > 0.5:
+            position_reward = ball_y * 0.05  # Reduced from 0.1
+        
+        # 5. PENALTIES (reduced during learning phase)
+        time_penalty = -1.0  # Reduced from -2.0 to be less harsh
+        stagnant_penalty = -2.0 if ball_speed < 0.1 else 0  # Reduced from -5.0
+        
+        ctrl_cost = self.control_cost(protagonist_action)
+
+        # Combine all rewards
+        reward = (victory + loss + 
+                 contact_reward + movement_reward + directional_reward + 
+                 position_reward + time_penalty + stagnant_penalty - ctrl_cost)
 
         return reward
 

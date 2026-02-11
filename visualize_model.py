@@ -6,15 +6,31 @@ import sys
 # Load the environment with rendering
 env = FoosballEnv(antagonist_model=None)
 
-# Load the trained model
-model_path = "./models/0/sac/best_model/best_model.zip"
+# Try to load the most recent model
+model_paths = [
+    "./models/0/sac/best_model.zip",           # Latest best model
+    "./models/0/sac/epoch_2/model.zip",        # Latest epoch
+    "./models/0/sac/best_model/best_model.zip" # Old path
+]
 
-try:
-    model = SAC.load(model_path)
-    print(f"✓ Model loaded successfully from {model_path}")
-except Exception as e:
-    print(f"✗ Error loading model: {e}")
-    print("Make sure you have trained a model first by running: python3 sac_agent_entry_v2.py")
+model = None
+model_path = None
+
+for path in model_paths:
+    try:
+        model = SAC.load(path)
+        model_path = path
+        print(f"✓ Model loaded successfully from {path}")
+        break
+    except Exception as e:
+        continue
+
+if model is None:
+    print(f"✗ Error: Could not load any model")
+    print("Available paths tried:")
+    for path in model_paths:
+        print(f"  - {path}")
+    print("\nMake sure you have trained a model first by running: python3 sac_agent_entry_v2.py")
     sys.exit(1)
 
 print("\n" + "="*60)

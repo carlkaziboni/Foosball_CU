@@ -21,9 +21,22 @@ class GenericAgentManager(AgentManager):
             agent.save()
 
     def initialize_frozen_best_models(self):
+        # Clear previous frozen models
+        self.frozen_best_models = []
+        
+        # Load the latest saved models as frozen opponents
         for i in range(self.num_agents):
             agent = self.agent_class(id=i, env=self.initial_env)
-            agent.initialize_agent()
+            try:
+                agent.load()  # Load the saved best model
+                print(f"Frozen agent {i} loaded from saved model")
+            except:
+                # If no saved model, use the current training agent
+                if i < len(self.training_agents):
+                    agent = self.training_agents[i]
+                    print(f"Frozen agent {i} using current training agent (no saved model)")
+                else:
+                    agent.initialize_agent()
             self.frozen_best_models.append(agent)
 
     def get_training_agents(self):

@@ -1,2 +1,12 @@
 models/0/sac/best_model.zip
 models/0/sac/best_model/best_model.zip
+models/0/sac/checkpoint_12k/model.zip
+models/0/sac/checkpoint_18k/model.zip
+models/0/sac/checkpoint_6k/model.zip
+models/0/sac/epoch_10/model.zip
+models/0/sac/epoch_2/model.zip
+models/0/sac/epoch_4/model.zip
+models/0/sac/epoch_6/model.zip
+models/0/sac/epoch_8/model.zip
+logs/evaluations.npz
+models/0/sac/best_model/model.zip

@@ -17,7 +17,7 @@ class SinglePlayerTrainingEngine(TrainingEngine):
 
     def train(self, total_epochs: int, epoch_timesteps: int, cycle_timesteps: int):
         total_timesteps = 0
-        checkpoint_intervals = [100000, 250000, 500000, 750000, 1000000, 1250000, 1500000]  # Save at these timesteps
+        checkpoint_intervals = [6000, 12000, 18000]  # Save at these timesteps for 18k training
         
         for epoch in range(total_epochs):
             print(f"\n{'='*60}")
@@ -27,10 +27,20 @@ class SinglePlayerTrainingEngine(TrainingEngine):
             print(f"{'='*60}\n")
             
             protagonist_agents = self.agent_manager.get_training_agents()
+            protagonist_agent = protagonist_agents[0]
+            
+            # After first epoch, reload the model to continue from previous training
+            if epoch > 0:
+                try:
+                    protagonist_agent.load()
+                    print(f"✓ Continuing training from previous epoch")
+                except:
+                    print(f"⚠ Could not load previous model, starting fresh")
+            
+            # Initialize frozen models (opponents) from saved best models
             self.agent_manager.initialize_frozen_best_models()
             antagonist_agents = self.agent_manager.get_frozen_best_models()
 
-            protagonist_agent = protagonist_agents[0]
             env = self.environment_generator()
             protagonist_agent.change_env(env)
             protagonist_agent.learn(epoch_timesteps)
@@ -51,8 +61,8 @@ class SinglePlayerTrainingEngine(TrainingEngine):
                     protagonist_agent.save_checkpoint(checkpoint_path)
                     print(f"🎯 Milestone checkpoint saved: {checkpoint//1000}k timesteps → {checkpoint_path}")
             
-            # Save periodic checkpoints every 10 epochs
-            if (epoch + 1) % 10 == 0:
+            # Save periodic checkpoints every 2 epochs
+            if (epoch + 1) % 2 == 0:
                 periodic_path = f"{protagonist_agent.model_dir}/{protagonist_agent.id}/sac/epoch_{epoch+1}"
                 protagonist_agent.save_checkpoint(periodic_path)
                 print(f"💾 Periodic checkpoint saved: epoch {epoch+1} → {periodic_path}")
