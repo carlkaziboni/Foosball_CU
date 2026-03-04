@@ -130,12 +130,12 @@
         <body name="y_def_guy1" pos="1.49 -0.05 -18.609" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_def_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_def_guy1" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_def_guy1" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_def_guy2" pos="1.49 -0.05 5.266" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_def_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_def_guy2" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_def_guy2" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -163,27 +163,27 @@
         <body name="y_mid_guy1" pos="1.49 -0.05 -30.837" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy1" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy1" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_mid_guy2" pos="1.49 -0.05 -18.862" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy2" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy2" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_mid_guy3" pos="1.49 -0.05 -6.887" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy3" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy3" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_mid_guy4" pos="1.49 -0.05 5.088" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy4_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy4" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy4" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_mid_guy5" pos="1.49 -0.05 17.063" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy5_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy5" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy5" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -211,17 +211,17 @@
         <body name="y_attack_guy1" pos="1.49 -0.05 -24.959" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy1" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy1" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_attack_guy2" pos="1.49 -0.05 -6.784" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy2" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy2" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="y_attack_guy3" pos="1.49 -0.05 11.391" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy3" size="1.5 3" rgba="0.95 0.95 0.0 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy3" size="1.5 3" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -250,17 +250,17 @@
         <body name="b_goal_guy1" pos="1.49 -0.05 -27.578" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_goal_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_goal_guy1" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_goal_guy1" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="b_goal_guy2" pos="1.49 -0.05 -6.902" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_goal_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_goal_guy2" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_goal_guy2" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="b_goal_guy3" pos="1.49 -0.05 13.773" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_goal_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_goal_guy3" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_goal_guy3" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -288,12 +288,12 @@
         <body name="b_def_guy1" pos="1.49 -0.05 -18.609" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_def_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_def_guy1" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_def_guy1" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="b_def_guy2" pos="1.49 -0.05 5.266" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_def_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_def_guy2" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_def_guy2" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -369,17 +369,17 @@
         <body name="b_attack_guy1" pos="1.49 -0.05 -24.959" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy1" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy1" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="b_attack_guy2" pos="1.49 -0.05 -6.784" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy2" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy2" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
         <body name="b_attack_guy3" pos="1.49 -0.05 11.391" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy3" size="1.5 3" rgba="0.05 0.05 0.05 1 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy3" size="1.5 3" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 

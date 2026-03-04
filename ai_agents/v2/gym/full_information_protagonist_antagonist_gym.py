@@ -7,6 +7,38 @@ import mujoco
 import os
 import glfw
 
+
+def _patch_model(model):
+    """
+    Fix v2 physics issues in-memory (no XML changes):
+      1. Disable table-mesh collision so the ball isn't embedded in the table.
+      2. Reduce ball joint friction from 20 → 2 (mass=0.1, so 20 gives 200 m/s² drag).
+      3. Add damping to rotation joints to stop runaway spinning.
+      4. Clamp rotation joint range to ±π.
+    """
+    # 1. Table-mesh collision off
+    table_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table")
+    if table_geom >= 0:
+        model.geom_contype[table_geom] = 0
+        model.geom_conaffinity[table_geom] = 0
+
+    # 2. Reduce ball joint friction
+    for jname in ["ball_x", "ball_y"]:
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+        if jid >= 0:
+            dof = model.jnt_dofadr[jid]
+            model.dof_frictionloss[dof] = 2.0
+
+    # 3 & 4. Rotation joints: add damping, limit range
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        jnt_name = f"{prefix}_rotation"
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_name)
+        if jid >= 0:
+            dof = model.jnt_dofadr[jid]
+            model.dof_damping[dof] = 5000.0
+            model.jnt_range[jid] = [-math.pi, math.pi]
+
 from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
 
 DIRECTION_CHANGE = 1
@@ -29,6 +61,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         xml_file = os.path.normpath(xml_file)  # Clean up the path
 
         self.model = mujoco.MjModel.from_xml_path(xml_file)
+        _patch_model(self.model)
         self.data = mujoco.MjData(self.model)
 
         self.simulation_time = 0
@@ -145,22 +178,21 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     def _get_ball_obs(self):
         ball_x_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_x')
         ball_y_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_y')
-        ball_z_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_z')
         x_qpos_adr = self.model.jnt_qposadr[ball_x_id]
         y_qpos_adr = self.model.jnt_qposadr[ball_y_id]
-        z_qpos_adr = self.model.jnt_qposadr[ball_z_id]
         x_qvel_adr = self.model.jnt_dofadr[ball_x_id]
         y_qvel_adr = self.model.jnt_dofadr[ball_y_id]
-        z_qvel_adr = self.model.jnt_dofadr[ball_z_id]
+        # ball_z joint does not exist in the v2 XML — ball sits on table surface.
+        # Return 0.0 for z pos/vel to keep observation space at 38-dim.
         ball_pos = [
             self.data.qpos[x_qpos_adr],
             self.data.qpos[y_qpos_adr],
-            self.data.qpos[z_qpos_adr]
+            0.0
         ]
         ball_vel = [
             self.data.qvel[x_qvel_adr],
             self.data.qvel[y_qvel_adr],
-            self.data.qvel[z_qvel_adr]
+            0.0
         ]
 
         return ball_pos, ball_vel
@@ -323,10 +355,10 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
     @property
     def is_healthy(self):
-        ball_z = self._get_ball_obs()[0][2]
-
-        min_z, max_z = self._healthy_z_range
-        is_healthy = min_z < ball_z < max_z
+        # ball_z is always 0 (no z joint), so use ball_y to detect out-of-bounds.
+        ball_y = self._get_ball_obs()[0][1]
+        min_y, max_y = self._healthy_z_range  # reuses existing ±80 range
+        is_healthy = min_y < ball_y < max_y
 
         return is_healthy
 
