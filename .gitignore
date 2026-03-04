@@ -10,3 +10,5 @@ models/0/sac/epoch_6/model.zip
 models/0/sac/epoch_8/model.zip
 logs/evaluations.npz
 models/0/sac/best_model/model.zip
+kaggle_training_v2.ipynb
+kaggle_training.ipynb

@@ -11,8 +11,8 @@ from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
 
 DIRECTION_CHANGE = 1
 TABLE_MAX_Y_DIM = 65
-BALL_STOPPED_COUNT_THRESHOLD = 50  # Increased from 10 for longer episodes
-MAX_STEPS = 1000  # Very long episodes for full gameplay
+BALL_STOPPED_COUNT_THRESHOLD = 300  # Was 50. Give it time to wind up!
+MAX_STEPS = 2000                    # Was 1000. Let the games play out longer.
 
 RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 
@@ -74,7 +74,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self._ctrl_cost_weight = 0.005
         self._terminate_when_unhealthy = True
         self._healthy_z_range = (-80, 80)
-        self.max_no_progress_steps = 50  # Increased from 15 for longer play
+        self.max_no_progress_steps = 300  # Was 50. Give the agent time to wind up a strike.
 
         self.prev_ball_y = None
         self.no_progress_steps = 0
@@ -118,7 +118,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         antagonist_observation = self._get_antagonist_obs()
 
         if self.antagonist_model is not None:
-            antagonist_action = self.antagonist_model.predict(antagonist_observation)
+            antagonist_result = self.antagonist_model.predict(antagonist_observation)
+            # SB3 SAC.predict() returns (action, state) tuple — unwrap it
+            antagonist_action = antagonist_result[0] if isinstance(antagonist_result, tuple) else antagonist_result
             antagonist_action = np.clip(antagonist_action, -1.0, 1.0)
 
             antagonist_action = self._adjust_antagonist_action(antagonist_action)
@@ -164,7 +166,8 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         return ball_pos, ball_vel
 
     def _get_antagonist_obs(self):
-        return None
+        # Full-information env: antagonist sees the same state as protagonist
+        return self._get_obs()
 
     def _get_obs(self):
         ball_pos, ball_vel = self._get_ball_obs()
@@ -254,24 +257,24 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
                     guy_pos = self.data.body(guy_body_id).xpos.copy()
                     distance = np.linalg.norm(ball_pos_2d - guy_pos)
                     
-                    # Reward proximity (decays with distance) - MASSIVELY INCREASED
+                    # Reward proximity, but keep it small enough that kicking is better
                     if distance < 10.0:
-                        contact_reward += 50.0 / (distance + 1.0)  # Was 5.0
+                        contact_reward += 5.0 / (distance + 1.0)  # Was 50.0
                     
-                    # Large reward for very close contact (likely hit) - MASSIVELY INCREASED
+                    # Small reward for close contact — not so large it discourages kicking
                     if distance < 3.0:
-                        contact_reward += 200.0  # Was 20.0
+                        contact_reward += 10.0  # Was 200.0! This was the hugging trap.
                 except:
                     continue  # Guy doesn't exist on this rod
         
-        # 2. BALL MOVEMENT REWARDS: Reward making the ball move - MASSIVELY INCREASED
+        # 2. BALL MOVEMENT REWARDS: Buffed to encourage violent strikes
         movement_reward = 0.0
         if ball_speed > 0.1:
-            movement_reward += ball_speed * 10.0  # Was 2.0 - Reward ball speed
+            movement_reward += ball_speed * 50.0  # Was 10.0. Massive multiplier for speed.
         
-        # Extra reward for ball being active
-        if ball_speed > 0.5:
-            movement_reward += 50.0  # Was 10.0
+        # Extra reward for a solid strike
+        if ball_speed > 1.0:                      # Was 0.5. Changed threshold to reward actual hits.
+            movement_reward += 200.0              # Was 50.0. Big bonus for a hard kick.
         
         # 3. DIRECTIONAL REWARDS: Reward ball moving toward opponent goal - MASSIVELY INCREASED
         directional_reward = 0.0
@@ -330,7 +333,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     def _is_ball_moving(self):
         ball_pos, ball_vel = self._get_ball_obs()
 
-        return np.linalg.norm(ball_vel) > 0.5
+        return np.linalg.norm(ball_vel) > 0.05  # Was 0.5. Reward even tiny nudges early on.
 
     def _determine_progression(self):
         ball_y = self._get_ball_obs()[0][1]
