@@ -11,62 +11,58 @@ import glfw
 def _patch_model(model):
     """
     Fix v2 physics issues in-memory (no XML changes):
-      1. Disable table-mesh collision so the ball isn't embedded in the table.
-      2. Disable collision on all foosman capsule / rod cylinder geoms
-         (capsules extend to z~2.5 and physically block ball movement).
-      3. Reduce ball joint friction from 20 → 2 (mass=0.1, so 20 gives 200 m/s² drag).
-      4. Add damping to rotation joints to stop runaway spinning.
-      5. Clamp rotation joint range to ±π.
+      1. Disable ALL collision (set every geom contype/conaffinity=0).
+         Virtual kicks handle ball–foosman interaction; no physical contact
+         is needed.  This eliminates:
+           – Ball hitting the ground plane (ball Z=1.7, radius=1.73 → overlap)
+           – Ball bouncing off rod handles, rubber bumpers, unnamed rod geoms
+           – DOF 5 instability from contact forces on y_mid_rod (unnamed geom_54)
+      2. Reduce ball joint friction from 20 → 0.5.
+      3. Moderate damping on rotation joints (50, not 1000 — avoids stiff dynamics
+         that caused NaN at DOF 5).  Limit range to ±π.
     """
-    # 1. Table-mesh collision off
-    table_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table")
-    if table_geom >= 0:
-        model.geom_contype[table_geom] = 0
-        model.geom_conaffinity[table_geom] = 0
+    # 1. Disable ALL geom collision
+    for i in range(model.ngeom):
+        model.geom_contype[i] = 0
+        model.geom_conaffinity[i] = 0
 
-    # 2. Disable collision on all rod / foosman geoms
-    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
-                    "b_goal", "b_def", "b_mid", "b_attack"]:
-        rod_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                      f"{prefix}_rod")
-        if rod_geom >= 0:
-            model.geom_contype[rod_geom] = 0
-            model.geom_conaffinity[rod_geom] = 0
-        for i in range(1, 6):
-            g = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                  f"{prefix}_guy{i}")
-            if g >= 0:
-                model.geom_contype[g] = 0
-                model.geom_conaffinity[g] = 0
-            gv = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                   f"{prefix}_guy{i}_visual")
-            if gv >= 0:
-                model.geom_contype[gv] = 0
-                model.geom_conaffinity[gv] = 0
-
-    # 3. Reduce ball joint friction
+    # 2. Reduce ball joint friction
     for jname in ["ball_x", "ball_y"]:
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
-            model.dof_frictionloss[dof] = 2.0
+            model.dof_frictionloss[dof] = 0.5
 
-    # 4 & 5. Rotation joints: add damping, limit range
+    # 3. Rotation joints: moderate damping, armature for stability, limit range
+    #    Original gains (40k–150k) + tiny inertia (0.044) + large ctrl range
+    #    → catastrophic instability at DOF 5.  Replace with critically-damped
+    #    PD: ωn ≈ 70 rad/s → quarter-turn in 0.023 s.  Stability ratio
+    #    kp·dt²/(I+armature) = 5000·4e-6/1.044 = 0.019 (rock-solid).
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         jnt_name = f"{prefix}_rotation"
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_name)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
-            model.dof_damping[dof] = 1000.0
+            model.dof_damping[dof] = 50.0
+            model.dof_armature[dof] = 1.0
             model.jnt_range[jid] = [-math.pi, math.pi]
+
+        # Tame the position-servo actuator: kp=5000, kd=200
+        act_name = f"{prefix}_rotation"
+        aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+        if aid >= 0:
+            model.actuator_gainprm[aid, 0] = 5000.0        # kp
+            model.actuator_biasprm[aid, 0] = 0.0
+            model.actuator_biasprm[aid, 1] = -5000.0       # -kp
+            model.actuator_biasprm[aid, 2] = -200.0         # -kd
 
 from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
 
 DIRECTION_CHANGE = 1
 TABLE_MAX_Y_DIM = 65
-BALL_STOPPED_COUNT_THRESHOLD = 300  # Was 50. Give it time to wind up!
-MAX_STEPS = 2000                    # Was 1000. Let the games play out longer.
+BALL_STOPPED_COUNT_THRESHOLD = 300
+MAX_EPISODE_STEPS = 1500              # actual env.step() calls, NOT simulation time
 
 RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 
@@ -74,10 +70,10 @@ RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 # Foosman collision is disabled (capsules block the ball).  Instead, when a
 # foosman is close to the ball *and* the rod is rotated past a threshold,
 # we inject a velocity impulse into the ball — exactly like dual_play.py.
-KICK_RADIUS   = 5.0    # X-Y proximity to trigger a kick
-KICK_SPEED    = 8.0    # peak impulse magnitude
+KICK_RADIUS   = 10.0   # X-Y proximity to trigger a kick (foosman Y spacing ~15-30)
+KICK_SPEED    = 60.0   # peak impulse magnitude (at 60 with friction=0.5: ~360 units travel)
 KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
-KICK_COOLDOWN = 30     # steps between consecutive kicks
+KICK_COOLDOWN = 15     # steps between consecutive kicks
 
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     metadata = {'render.modes': ['human', 'rgb_array']}
@@ -219,6 +215,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self.data.qpos[self._by_qpos] = xy_random[1]
 
         self.simulation_time = 0
+        self._step_count = 0
         self.prev_ball_y = self.data.qpos[self._by_qpos]
         self.no_progress_steps = 0
         self.ball_stopped_count = 0
@@ -247,6 +244,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         mujoco.mj_step(self.model, self.data)
         self._apply_virtual_kicks()   # inject ball impulse if foosman near + rotated
         self.simulation_time += self.model.opt.timestep
+        self._step_count += 1
 
         obs = self._get_obs()
 
@@ -343,12 +341,14 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
         ball_pos, ball_vel = self._get_ball_obs()
-        ball_y     = ball_pos[1]
         ball_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
 
+        # Use world-frame Y for goal detection (ball body offset is -4)
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+
         # 1. GOALS — dominant signal ±3000
-        victory = 3000.0 if ball_y >  TABLE_MAX_Y_DIM else 0.0
-        loss    = -3000.0 if ball_y < -TABLE_MAX_Y_DIM else 0.0
+        victory = 3000.0 if ball_world_y >  TABLE_MAX_Y_DIM else 0.0
+        loss    = -3000.0 if ball_world_y < -TABLE_MAX_Y_DIM else 0.0
 
         # Ball world-frame XY
         ball_world_xy = self.data.body(self._ball_bid).xpos[:2]
@@ -431,26 +431,18 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self.ball_stopped_count = 0 if self._is_ball_moving() else self.ball_stopped_count + 1
         ball_stagnant = self.ball_stopped_count >= BALL_STOPPED_COUNT_THRESHOLD
 
-        over_max_steps = self.simulation_time >= MAX_STEPS
+        over_max_steps = self._step_count >= MAX_EPISODE_STEPS
 
         unhealthy = not self.is_healthy
         no_progress = self.no_progress_steps >= self.max_no_progress_steps
 
-        ball_y = self._get_ball_obs()[0][1]
-        ball_x = self._get_ball_obs()[0][0]
-
-        victory = ball_y < -1 * TABLE_MAX_Y_DIM or ball_y > TABLE_MAX_Y_DIM  # Ball in any goal
-
-        if victory:
-            print("Victory")
-            print(f"Ball x: {ball_x}, Ball y: {ball_y}")
+        # Use world-frame Y for goal detection
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+        victory = ball_world_y < -TABLE_MAX_Y_DIM or ball_world_y > TABLE_MAX_Y_DIM
 
         terminated = (
-                unhealthy or (no_progress and not self.play_until_goal) or ball_stagnant or over_max_steps #or victory
+                unhealthy or (no_progress and not self.play_until_goal)
+                or ball_stagnant or over_max_steps or victory
         ) if self._terminate_when_unhealthy else False
 
-        if self.verbose_mode and terminated:
-            print("Terminated")
-            print(f"Unhealthy: {unhealthy}, No progress: {no_progress}, Victory: {victory}, Ball stagnant: {ball_stagnant}")
-            print("x: ", ball_x, "y: ", ball_y)
         return terminated

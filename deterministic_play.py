@@ -100,57 +100,41 @@ HIT_RADIUS_XY  = 15.0    # Proximity (X-Y plane) to count as a "hit"
 def patch_model(model):
     """
     Fix v2 physics issues in-memory (no XML changes):
-      1. Disable table-mesh collision (ball is embedded, generating huge forces).
-      2. Disable collision on all foosman capsule / rod cylinder geoms
-         (capsules extend to z~2.5 and physically block ball movement;
-          we use kinematic hit detection instead).
-      3. Add damping to rotation joints (prevents runaway spinning).
-      4. Clamp rotation joint ranges to one revolution.
+      1. Disable ALL geom collision (virtual kicks handle ball interaction).
+      2. Reduce ball joint friction from 20 → 0.5.
+      3. Stabilise rotation actuators: armature=1.0, kp=5000, kd=200,
+         damping=50.  Original kp up to 150k with inertia 0.044 → NaN.
     """
-    # 1. Table-mesh collision off
-    table_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table")
-    if table_geom >= 0:
-        model.geom_contype[table_geom] = 0
-        model.geom_conaffinity[table_geom] = 0
+    # 1. Disable ALL geom collision
+    for i in range(model.ngeom):
+        model.geom_contype[i] = 0
+        model.geom_conaffinity[i] = 0
 
-    # 1b. Disable collision on all rod / foosman geoms
-    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
-                    "b_goal", "b_def", "b_mid", "b_attack"]:
-        rod_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                      f"{prefix}_rod")
-        if rod_geom >= 0:
-            model.geom_contype[rod_geom] = 0
-            model.geom_conaffinity[rod_geom] = 0
-        for i in range(1, 6):
-            g = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                  f"{prefix}_guy{i}")
-            if g >= 0:
-                model.geom_contype[g] = 0
-                model.geom_conaffinity[g] = 0
-            gv = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
-                                   f"{prefix}_guy{i}_visual")
-            if gv >= 0:
-                model.geom_contype[gv] = 0
-                model.geom_conaffinity[gv] = 0
-
-    # 1c. Reduce ball joint friction (XML has 20, way too high for m=0.1)
+    # 2. Reduce ball joint friction
     for jname in ["ball_x", "ball_y"]:
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
-            model.dof_frictionloss[dof] = 2.0  # 10x reduction
+            model.dof_frictionloss[dof] = 0.5
 
-    # 2 & 3. Rotation joints: add damping, limit range
+    # 3. Rotation joints: moderate damping + armature + tamed actuator gains
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         jnt_name = f"{prefix}_rotation"
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_name)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
-            model.dof_damping[dof] = 5000.0
+            model.dof_damping[dof] = 50.0
+            model.dof_armature[dof] = 1.0
             model.jnt_range[jid] = [-math.pi, math.pi]
+        aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{prefix}_rotation")
+        if aid >= 0:
+            model.actuator_gainprm[aid, 0] = 5000.0
+            model.actuator_biasprm[aid, 0] = 0.0
+            model.actuator_biasprm[aid, 1] = -5000.0
+            model.actuator_biasprm[aid, 2] = -200.0
 
-    print("  Model patched: table + foosman collision off, rotation joints damped & limited.")
+    print("  Model patched: all collision off, rotation actuators stabilised.")
 
 
 def resolve_ids(model):
