@@ -417,10 +417,12 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
         # Use world-frame Y for goal detection (ball body offset is -4)
         ball_world_y = self.data.body(self._ball_bid).xpos[1]
+        ball_world_x = self.data.body(self._ball_bid).xpos[0]
 
-        # 1. GOALS — dominant signal ±3000
-        victory = 3000.0 if ball_world_y >  TABLE_MAX_Y_DIM else 0.0
-        loss    = -3000.0 if ball_world_y < -TABLE_MAX_Y_DIM else 0.0
+        # 1. GOALS — dominant signal ±3000 (only if ball is inside goal opening)
+        in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
+        victory = 3000.0  if (ball_world_y >  TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
+        loss    = -3000.0 if (ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
 
         # Ball world-frame XY
         ball_world_xy = self.data.body(self._ball_bid).xpos[:2]
@@ -508,13 +510,17 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         unhealthy = not self.is_healthy
         no_progress = self.no_progress_steps >= self.max_no_progress_steps
 
-        # Use world-frame Y for goal detection
+        # Use world-frame Y for goal detection — only counts if ball is
+        # inside the goal opening (|ball_x| < GOAL_HALF_WIDTH).  Hits on the
+        # end wall outside the opening are handled by _apply_wall_bounces.
         ball_world_y = self.data.body(self._ball_bid).xpos[1]
-        victory = ball_world_y < -TABLE_MAX_Y_DIM or ball_world_y > TABLE_MAX_Y_DIM
+        ball_world_x = self.data.body(self._ball_bid).xpos[0]
+        in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
+        goal_scored = (ball_world_y < -TABLE_MAX_Y_DIM or ball_world_y > TABLE_MAX_Y_DIM) and in_goal_opening
 
         terminated = (
                 unhealthy or (no_progress and not self.play_until_goal)
-                or ball_stagnant or over_max_steps or victory
+                or ball_stagnant or over_max_steps or goal_scored
         ) if self._terminate_when_unhealthy else False
 
         return terminated
