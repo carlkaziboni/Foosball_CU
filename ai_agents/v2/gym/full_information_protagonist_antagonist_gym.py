@@ -12,9 +12,11 @@ def _patch_model(model):
     """
     Fix v2 physics issues in-memory (no XML changes):
       1. Disable table-mesh collision so the ball isn't embedded in the table.
-      2. Reduce ball joint friction from 20 → 2 (mass=0.1, so 20 gives 200 m/s² drag).
-      3. Add damping to rotation joints to stop runaway spinning.
-      4. Clamp rotation joint range to ±π.
+      2. Disable collision on all foosman capsule / rod cylinder geoms
+         (capsules extend to z~2.5 and physically block ball movement).
+      3. Reduce ball joint friction from 20 → 2 (mass=0.1, so 20 gives 200 m/s² drag).
+      4. Add damping to rotation joints to stop runaway spinning.
+      5. Clamp rotation joint range to ±π.
     """
     # 1. Table-mesh collision off
     table_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table")
@@ -22,14 +24,34 @@ def _patch_model(model):
         model.geom_contype[table_geom] = 0
         model.geom_conaffinity[table_geom] = 0
 
-    # 2. Reduce ball joint friction
+    # 2. Disable collision on all rod / foosman geoms
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        rod_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
+                                      f"{prefix}_rod")
+        if rod_geom >= 0:
+            model.geom_contype[rod_geom] = 0
+            model.geom_conaffinity[rod_geom] = 0
+        for i in range(1, 6):
+            g = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
+                                  f"{prefix}_guy{i}")
+            if g >= 0:
+                model.geom_contype[g] = 0
+                model.geom_conaffinity[g] = 0
+            gv = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
+                                   f"{prefix}_guy{i}_visual")
+            if gv >= 0:
+                model.geom_contype[gv] = 0
+                model.geom_conaffinity[gv] = 0
+
+    # 3. Reduce ball joint friction
     for jname in ["ball_x", "ball_y"]:
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
             model.dof_frictionloss[dof] = 2.0
 
-    # 3 & 4. Rotation joints: add damping, limit range
+    # 4 & 5. Rotation joints: add damping, limit range
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         jnt_name = f"{prefix}_rotation"
@@ -130,8 +152,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         x_qpos_adr = self.model.jnt_qposadr[ball_x_id]
         y_qpos_adr = self.model.jnt_qposadr[ball_y_id]
 
+        # Ball body pos is (0, -4, 1.705), so qpos_y=4 → world Y≈0 (field centre).
         xy_random = np.random.normal(
-            loc=[-0.5, 0.0],
+            loc=[-0.5, 4.0],
             scale=[0.5, 0.5]
         )
 
@@ -275,27 +298,30 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         # CURRICULUM LEARNING REWARDS: Help agent learn to interact with ball
         
         # 1. CONTACT REWARDS: Reward for getting foosmen near the ball
+        #    Use ball body xpos (world frame) and only X-Y distance.
+        #    Ball body is at z~1.7, foosmen bodies at z~6.3 — using 3D distance
+        #    would make the minimum distance ~4.5, preventing close-contact rewards.
         contact_reward = 0.0
-        ball_pos_2d = np.array([ball_x, ball_y, ball_z])
+        ball_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
+        ball_world_xy = self.data.body(ball_body_id).xpos[:2].copy()
         
         # Check protagonist's foosmen (yellow team)
         for rod in RODS:
-            rod_name = f"y{rod}rod"
             # Get positions of guys on this rod
             for guy_num in range(1, 6):  # Max 5 guys per rod
                 guy_name = f"y{rod}guy{guy_num}"
                 try:
                     guy_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, guy_name)
-                    guy_pos = self.data.body(guy_body_id).xpos.copy()
-                    distance = np.linalg.norm(ball_pos_2d - guy_pos)
+                    guy_xy = self.data.body(guy_body_id).xpos[:2].copy()
+                    distance = np.linalg.norm(ball_world_xy - guy_xy)
                     
                     # Reward proximity, but keep it small enough that kicking is better
                     if distance < 10.0:
-                        contact_reward += 5.0 / (distance + 1.0)  # Was 50.0
+                        contact_reward += 5.0 / (distance + 1.0)
                     
-                    # Small reward for close contact — not so large it discourages kicking
+                    # Reward for close contact — now actually reachable with 2D distance
                     if distance < 3.0:
-                        contact_reward += 10.0  # Was 200.0! This was the hugging trap.
+                        contact_reward += 10.0
                 except:
                     continue  # Guy doesn't exist on this rod
         
