@@ -234,7 +234,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
         # Ball body pos is (0, -4, 1.705), so qpos_y=4 → world Y≈0 (field centre).
         xy_random = np.random.normal(
-            loc=[-0.5, 4.0],
+            loc=[0.0, 4.0],
             scale=[0.5, 0.5]
         )
 
@@ -261,6 +261,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             antagonist_action = antagonist_result[0] if isinstance(antagonist_result, tuple) else antagonist_result
             antagonist_action = np.clip(antagonist_action, -1.0, 1.0)
 
+            # Scale from [-1,1] to same range as protagonist (±20) so both
+            # teams have equal control authority, then mirror directions.
+            antagonist_action = antagonist_action * 20.0
             antagonist_action = self._adjust_antagonist_action(antagonist_action)
         else:
             antagonist_action = np.zeros(self.antagonist_action_size)

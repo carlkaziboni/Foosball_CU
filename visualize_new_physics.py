@@ -13,22 +13,36 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ai_agents.v2.gym.full_information_protagonist_antagonist_gym import FoosballEnv
 import numpy as np
 
+
+class RandomAntagonist:
+    """Dummy model that returns random actions in [-1,1], matching SB3 API.
+    The env scales these to ±20 internally so blue is equally aggressive."""
+    def __init__(self, action_size):
+        self.action_size = action_size
+
+    def predict(self, obs, **kwargs):
+        action = np.random.uniform(-1.0, 1.0, size=self.action_size).astype(np.float32)
+        return action, None
+
+
 NUM_EPISODES = 10
 
 print("=" * 60)
-print("  Foosball Physics Visualization — Random Actions")
+print("  Foosball Physics Visualization — Both Teams Playing")
 print("=" * 60)
 print("  Fixes applied:")
-print("    - All collision disabled (virtual kicks only)")
+print("    - Selective collision (ball + foosmen + side walls)")
 print("    - Actuator gains stabilised (kp 150k→5k)")
 print("    - Armature=1.0 on rotation DOFs")
 print("    - KICK_SPEED=120, KICK_RADIUS=10, ball_x limits ±32")
+print("    - Both yellow AND blue take random actions")
 print()
-print(f"  Running {NUM_EPISODES} episodes with random actions...")
+print(f"  Running {NUM_EPISODES} episodes...")
 print("  Close the window or press Ctrl+C to stop.")
 print("=" * 60)
 
-env = FoosballEnv()
+antagonist = RandomAntagonist(action_size=8)
+env = FoosballEnv(antagonist_model=antagonist)
 
 try:
     for episode in range(NUM_EPISODES):
