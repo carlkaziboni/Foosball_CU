@@ -102,10 +102,11 @@ KICK_SPEED    = 120.0  # peak impulse magnitude — needs to be large for 130-un
 KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
 KICK_COOLDOWN = 10     # steps between consecutive kicks
 
-# ── Goal / end-wall parameters ───────────────────────────────────────────────────────────
-GOAL_HALF_WIDTH = 15.0   # half-width of goal opening in X (±15 ≈ 30 units)
-WALL_Y         = 65.0    # world-Y position of each end wall (same as TABLE_MAX_Y_DIM)
-WALL_RESTITUTION = 0.8   # coefficient of restitution for end-wall bounces
+# ── Goal / wall parameters ───────────────────────────────────────────────────────────────
+GOAL_HALF_WIDTH  = 15.0   # half-width of goal opening in X (±15 ≈ 30 units)
+WALL_Y           = 65.0   # world-Y position of each end wall
+WALL_X           = 32.0   # world-X position of each side wall
+WALL_RESTITUTION = 0.95   # coefficient of restitution for ALL wall bounces
 
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     metadata = {'render.modes': ['human', 'rgb_array']}
@@ -374,35 +375,40 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     def euclidean_goal_distance(self, x, y):
         return math.sqrt((x - 0) ** 2 + (y - TABLE_MAX_Y_DIM) ** 2)
 
-    # ── End-wall bounce engine ────────────────────────────────────────────────────────────
+    # ── Wall-bounce engine (sides + ends) ───────────────────────────────────────────────
     def _apply_wall_bounces(self):
-        """Bounce the ball off the end walls, but let it pass through the
-        goal opening (|ball_x| < GOAL_HALF_WIDTH).  Geoms are at Z=11.2
-        while the ball is at Z=1.7, so physical collision can't work —
-        we handle it in code instead."""
-        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+        """Bounce the ball off side walls (±WALL_X) and end walls (±WALL_Y).
+        End walls have a goal opening (|ball_x| < GOAL_HALF_WIDTH) that lets
+        the ball through.  All wall geoms are above the ball plane, so bounces
+        are handled in code."""
         ball_world_x = self.data.body(self._ball_bid).xpos[0]
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
 
-        # Only trigger near the end walls
-        if abs(ball_world_y) < WALL_Y:
-            return
+        # ── Side-wall bounces (left/right, ±WALL_X) ─────────────────────────
+        vel_x = self.data.qvel[self._bx_dof]
+        if ball_world_x > WALL_X and vel_x > 0:
+            self.data.qvel[self._bx_dof] = -abs(vel_x) * WALL_RESTITUTION
+            overshoot = ball_world_x - WALL_X
+            self.data.qpos[self._bx_qpos] -= overshoot + 0.3
+        elif ball_world_x < -WALL_X and vel_x < 0:
+            self.data.qvel[self._bx_dof] = abs(vel_x) * WALL_RESTITUTION
+            overshoot = -WALL_X - ball_world_x
+            self.data.qpos[self._bx_qpos] += overshoot + 0.3
 
-        # Inside goal opening — let the ball through (goal scored)
-        if abs(ball_world_x) < GOAL_HALF_WIDTH:
-            return
-
-        # Ball hit the end wall outside the goal — bounce it back
-        vel_y = self.data.qvel[self._by_dof]
-        # Only bounce if moving toward the wall (not already bouncing back)
-        if ball_world_y > WALL_Y and vel_y > 0:
-            self.data.qvel[self._by_dof] = -abs(vel_y) * WALL_RESTITUTION
-            # Push ball back inside
-            overshoot = ball_world_y - WALL_Y
-            self.data.qpos[self._by_qpos] -= overshoot + 0.5
-        elif ball_world_y < -WALL_Y and vel_y < 0:
-            self.data.qvel[self._by_dof] = abs(vel_y) * WALL_RESTITUTION
-            overshoot = -WALL_Y - ball_world_y
-            self.data.qpos[self._by_qpos] += overshoot + 0.5
+        # ── End-wall bounces (top/bottom, ±WALL_Y) ──────────────────────────
+        if abs(ball_world_y) >= WALL_Y:
+            # Inside goal opening — let the ball through (goal scored)
+            if abs(ball_world_x) < GOAL_HALF_WIDTH:
+                return
+            vel_y = self.data.qvel[self._by_dof]
+            if ball_world_y > WALL_Y and vel_y > 0:
+                self.data.qvel[self._by_dof] = -abs(vel_y) * WALL_RESTITUTION
+                overshoot = ball_world_y - WALL_Y
+                self.data.qpos[self._by_qpos] -= overshoot + 0.5
+            elif ball_world_y < -WALL_Y and vel_y < 0:
+                self.data.qvel[self._by_dof] = abs(vel_y) * WALL_RESTITUTION
+                overshoot = -WALL_Y - ball_world_y
+                self.data.qpos[self._by_qpos] += overshoot + 0.5
 
     # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
