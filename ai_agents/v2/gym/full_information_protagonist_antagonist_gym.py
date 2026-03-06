@@ -102,6 +102,11 @@ KICK_SPEED    = 120.0  # peak impulse magnitude — needs to be large for 130-un
 KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
 KICK_COOLDOWN = 10     # steps between consecutive kicks
 
+# ── Goal / end-wall parameters ───────────────────────────────────────────────────────────
+GOAL_HALF_WIDTH = 15.0   # half-width of goal opening in X (±15 ≈ 30 units)
+WALL_Y         = 65.0    # world-Y position of each end wall (same as TABLE_MAX_Y_DIM)
+WALL_RESTITUTION = 0.8   # coefficient of restitution for end-wall bounces
+
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     metadata = {'render.modes': ['human', 'rgb_array']}
 
@@ -273,6 +278,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
         mujoco.mj_step(self.model, self.data)
         self._apply_virtual_kicks()   # inject ball impulse if foosman near + rotated
+        self._apply_wall_bounces()    # bounce off end walls (except goal opening)
         self.simulation_time += self.model.opt.timestep
         self._step_count += 1
 
@@ -367,6 +373,36 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
     def euclidean_goal_distance(self, x, y):
         return math.sqrt((x - 0) ** 2 + (y - TABLE_MAX_Y_DIM) ** 2)
+
+    # ── End-wall bounce engine ────────────────────────────────────────────────────────────
+    def _apply_wall_bounces(self):
+        """Bounce the ball off the end walls, but let it pass through the
+        goal opening (|ball_x| < GOAL_HALF_WIDTH).  Geoms are at Z=11.2
+        while the ball is at Z=1.7, so physical collision can't work —
+        we handle it in code instead."""
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+        ball_world_x = self.data.body(self._ball_bid).xpos[0]
+
+        # Only trigger near the end walls
+        if abs(ball_world_y) < WALL_Y:
+            return
+
+        # Inside goal opening — let the ball through (goal scored)
+        if abs(ball_world_x) < GOAL_HALF_WIDTH:
+            return
+
+        # Ball hit the end wall outside the goal — bounce it back
+        vel_y = self.data.qvel[self._by_dof]
+        # Only bounce if moving toward the wall (not already bouncing back)
+        if ball_world_y > WALL_Y and vel_y > 0:
+            self.data.qvel[self._by_dof] = -abs(vel_y) * WALL_RESTITUTION
+            # Push ball back inside
+            overshoot = ball_world_y - WALL_Y
+            self.data.qpos[self._by_qpos] -= overshoot + 0.5
+        elif ball_world_y < -WALL_Y and vel_y < 0:
+            self.data.qvel[self._by_dof] = abs(vel_y) * WALL_RESTITUTION
+            overshoot = -WALL_Y - ball_world_y
+            self.data.qpos[self._by_qpos] += overshoot + 0.5
 
     # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
