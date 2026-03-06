@@ -11,27 +11,54 @@ import glfw
 def _patch_model(model):
     """
     Fix v2 physics issues in-memory (no XML changes):
-      1. Disable ALL collision (set every geom contype/conaffinity=0).
-         Virtual kicks handle ball–foosman interaction; no physical contact
-         is needed.  This eliminates:
-           – Ball hitting the ground plane (ball Z=1.7, radius=1.73 → overlap)
-           – Ball bouncing off rod handles, rubber bumpers, unnamed rod geoms
-           – DOF 5 instability from contact forces on y_mid_rod (unnamed geom_54)
+      1. Selective collision: disable ground plane, table mesh, rod cylinders,
+         rod handles, and rod rubber bumpers.  KEEP ball, foosman figures, and
+         side-wall rubbers so the ball physically bounces off walls and gets
+         struck by foosmen.
       2. Reduce ball joint friction from 20 → 0.5.
-      3. Moderate damping on rotation joints (50, not 1000 — avoids stiff dynamics
-         that caused NaN at DOF 5).  Limit range to ±π.
+      3. Stabilise rotation actuators: armature=1.0, kp=5000, kd=200.
     """
-    # 1. Disable ALL geom collision
+    # 1. Disable ALL geom collision first, then re-enable the ones we need
     for i in range(model.ngeom):
         model.geom_contype[i] = 0
         model.geom_conaffinity[i] = 0
 
-    # 2. Reduce ball joint friction
-    for jname in ["ball_x", "ball_y"]:
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
-        if jid >= 0:
-            dof = model.jnt_dofadr[jid]
-            model.dof_frictionloss[dof] = 0.5
+    # Re-enable ball
+    ball_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "ball")
+    if ball_geom >= 0:
+        model.geom_contype[ball_geom] = 1
+        model.geom_conaffinity[ball_geom] = 1
+
+    # Re-enable side-wall rubber bumpers (keep ball in bounds)
+    for i in range(model.ngeom):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i)
+        if name and "table_side_rubber" in name:
+            model.geom_contype[i] = 1
+            model.geom_conaffinity[i] = 1
+
+    # Re-enable foosman figure geoms (capsules + meshes) so ball bounces off them
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        for g in range(1, 6):
+            for suffix in [f"{prefix}_guy{g}", f"{prefix}_guy{g}_visual"]:
+                gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, suffix)
+                if gid >= 0:
+                    model.geom_contype[gid] = 1
+                    model.geom_conaffinity[gid] = 1
+
+    # 2. Ball joint limits & friction
+    #    Side-wall rubber geoms sit at Z=7.75, ball at Z=1.705 — collision can't
+    #    contain it.  Hard joint limits on ball_x keep it inside the field (±32).
+    bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
+    if bx_jid >= 0:
+        model.jnt_limited[bx_jid] = 1
+        model.jnt_range[bx_jid] = [-32.0, 32.0]   # walls at ±33.75
+        model.dof_frictionloss[model.jnt_dofadr[bx_jid]] = 0.2
+    by_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_y")
+    if by_jid >= 0:
+        model.jnt_limited[by_jid] = 1
+        model.jnt_range[by_jid] = [-70.0, 78.0]   # generous: goals at world ±65
+        model.dof_frictionloss[model.jnt_dofadr[by_jid]] = 0.2
 
     # 3. Rotation joints: moderate damping, armature for stability, limit range
     #    Original gains (40k–150k) + tiny inertia (0.044) + large ctrl range
@@ -71,9 +98,9 @@ RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 # foosman is close to the ball *and* the rod is rotated past a threshold,
 # we inject a velocity impulse into the ball — exactly like dual_play.py.
 KICK_RADIUS   = 10.0   # X-Y proximity to trigger a kick (foosman Y spacing ~15-30)
-KICK_SPEED    = 60.0   # peak impulse magnitude (at 60 with friction=0.5: ~360 units travel)
+KICK_SPEED    = 120.0  # peak impulse magnitude — needs to be large for 130-unit field
 KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
-KICK_COOLDOWN = 15     # steps between consecutive kicks
+KICK_COOLDOWN = 10     # steps between consecutive kicks
 
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     metadata = {'render.modes': ['human', 'rgb_array']}

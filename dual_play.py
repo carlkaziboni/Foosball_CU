@@ -154,21 +154,50 @@ ALL_RODS = YELLOW_RODS + BLUE_RODS
 def patch_model(model):
     """
     Fix v2 physics issues in-memory:
-      1. Disable ALL geom collision (virtual kicks handle ball interaction).
+      1. Selective collision: disable ground plane, table mesh, rod cylinders,
+         rod handles, rod rubber bumpers.  KEEP ball, foosman figures, and
+         side-wall rubbers so ball physically bounces off walls & players.
       2. Reduce ball joint friction from 20 → 0.5.
-      3. Stabilise rotation actuators: armature=1.0, kp=5000, kd=200,
-         damping=50.  Original kp up to 150k with inertia 0.044 → NaN.
+      3. Stabilise rotation actuators: armature=1.0, kp=5000, kd=200.
     """
-    # 1. Disable ALL geom collision
+    # 1. Disable ALL, then re-enable ball + foosmen + side walls
     for i in range(model.ngeom):
         model.geom_contype[i] = 0
         model.geom_conaffinity[i] = 0
 
-    # 2. Reduce ball joint friction
-    for jname in ["ball_x", "ball_y"]:
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
-        if jid >= 0:
-            model.dof_frictionloss[model.jnt_dofadr[jid]] = 0.5
+    ball_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "ball")
+    if ball_geom >= 0:
+        model.geom_contype[ball_geom] = 1
+        model.geom_conaffinity[ball_geom] = 1
+
+    for i in range(model.ngeom):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i)
+        if name and "table_side_rubber" in name:
+            model.geom_contype[i] = 1
+            model.geom_conaffinity[i] = 1
+
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        for g in range(1, 6):
+            for suffix in [f"{prefix}_guy{g}", f"{prefix}_guy{g}_visual"]:
+                gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, suffix)
+                if gid >= 0:
+                    model.geom_contype[gid] = 1
+                    model.geom_conaffinity[gid] = 1
+
+    # 2. Ball joint limits & friction
+    #    Side-wall rubber geoms sit at Z=7.75, ball at Z=1.705 — can't collide.
+    #    Hard joint limits on ball_x keep it inside the field (±32).
+    bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
+    if bx_jid >= 0:
+        model.jnt_limited[bx_jid] = 1
+        model.jnt_range[bx_jid] = [-32.0, 32.0]
+        model.dof_frictionloss[model.jnt_dofadr[bx_jid]] = 0.2
+    by_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_y")
+    if by_jid >= 0:
+        model.jnt_limited[by_jid] = 1
+        model.jnt_range[by_jid] = [-70.0, 78.0]
+        model.dof_frictionloss[model.jnt_dofadr[by_jid]] = 0.2
 
     # 3. Rotation joints: moderate damping + armature + tamed actuator gains
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
@@ -188,7 +217,7 @@ def patch_model(model):
             model.actuator_biasprm[aid, 1] = -5000.0
             model.actuator_biasprm[aid, 2] = -200.0
 
-    print("  Model patched: all collision off, rotation actuators stabilised.")
+    print("  Model patched: selective collision (ball+foosmen+walls), actuators stabilised.")
 
 
 def resolve_ids(model):
