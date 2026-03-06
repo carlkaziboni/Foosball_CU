@@ -58,7 +58,7 @@ def _patch_model(model):
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_name)
         if jid >= 0:
             dof = model.jnt_dofadr[jid]
-            model.dof_damping[dof] = 5000.0
+            model.dof_damping[dof] = 1000.0
             model.jnt_range[jid] = [-math.pi, math.pi]
 
 from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
@@ -69,6 +69,15 @@ BALL_STOPPED_COUNT_THRESHOLD = 300  # Was 50. Give it time to wind up!
 MAX_STEPS = 2000                    # Was 1000. Let the games play out longer.
 
 RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
+
+# ── Virtual-kick parameters ────────────────────────────────────────────────────
+# Foosman collision is disabled (capsules block the ball).  Instead, when a
+# foosman is close to the ball *and* the rod is rotated past a threshold,
+# we inject a velocity impulse into the ball — exactly like dual_play.py.
+KICK_RADIUS   = 5.0    # X-Y proximity to trigger a kick
+KICK_SPEED    = 8.0    # peak impulse magnitude
+KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
+KICK_COOLDOWN = 30     # steps between consecutive kicks
 
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     metadata = {'render.modes': ['human', 'rgb_array']}
@@ -129,11 +138,12 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self._ctrl_cost_weight = 0.005
         self._terminate_when_unhealthy = True
         self._healthy_z_range = (-80, 80)
-        self.max_no_progress_steps = 300  # Was 50. Give the agent time to wind up a strike.
+        self.max_no_progress_steps = 500
 
         self.prev_ball_y = None
         self.no_progress_steps = 0
         self.ball_stopped_count = 0
+        self._kick_cooldown = 0          # virtual-kick cooldown counter
 
         self.antagonist_model = antagonist_model
         self.play_until_goal = play_until_goal
@@ -165,6 +175,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self.prev_ball_y = self.data.qpos[y_qpos_adr]
         self.no_progress_steps = 0
         self.ball_stopped_count = 0
+        self._kick_cooldown = 0
 
         return self._get_obs(), {}
 
@@ -187,6 +198,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self.data.ctrl[self.protagonist_action_size:self.protagonist_action_size + self.antagonist_action_size] = antagonist_action
 
         mujoco.mj_step(self.model, self.data)
+        self._apply_virtual_kicks()   # inject ball impulse if foosman near + rotated
         self.simulation_time += self.model.opt.timestep
 
         obs = self._get_obs()
@@ -275,89 +287,94 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
         return adjusted_action
 
+    # ── Virtual-kick engine ────────────────────────────────────────────────────
+    def _apply_virtual_kicks(self):
+        """If a foosman is within KICK_RADIUS of the ball *and* its rod is
+        rotated past KICK_MIN_ROT, inject a velocity impulse into the ball.
+        Yellow kicks toward +Y (opponent goal), blue toward −Y.
+        One kick per step max; shared cooldown."""
+        if self._kick_cooldown > 0:
+            self._kick_cooldown -= 1
+            return
+
+        ball_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
+        ball_xy  = self.data.body(ball_bid).xpos[:2]
+
+        bx_jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_x')
+        by_jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_y')
+        bx_dof = self.model.jnt_dofadr[bx_jid]
+        by_dof = self.model.jnt_dofadr[by_jid]
+
+        for player in ['y', 'b']:
+            kick_dir = 1.0 if player == 'y' else -1.0
+            for rod in RODS:
+                rot_jid = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_JOINT, f"{player}{rod}rotation")
+                rot_angle = self.data.qpos[self.model.jnt_qposadr[rot_jid]]
+                if abs(rot_angle) < KICK_MIN_ROT:
+                    continue
+
+                for g in range(1, 6):
+                    gid = mujoco.mj_name2id(
+                        self.model, mujoco.mjtObj.mjOBJ_BODY, f"{player}{rod}guy{g}")
+                    if gid < 0:
+                        continue
+                    guy_xy = self.data.body(gid).xpos[:2]
+                    dist   = np.linalg.norm(ball_xy - guy_xy)
+                    if dist < KICK_RADIUS:
+                        strength = min(abs(rot_angle), 1.5) / 1.5   # 0→1
+                        impulse  = KICK_SPEED * strength * (1.0 - dist / KICK_RADIUS)
+                        self.data.qvel[by_dof] += kick_dir * impulse
+                        self.data.qvel[bx_dof] += (ball_xy[0] - guy_xy[0]) * 1.5
+                        self._kick_cooldown = KICK_COOLDOWN
+                        return  # one kick per step
 
     def euclidean_goal_distance(self, x, y):
-        # Point (0, 64)
         return math.sqrt((x - 0) ** 2 + (y - TABLE_MAX_Y_DIM) ** 2)
 
+    # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
-        ball_obs = self._get_ball_obs()
-        ball_pos = ball_obs[0]
-        ball_vel = ball_obs[1]
-        ball_y = ball_pos[1]
-        ball_x = ball_pos[0]
-        ball_z = ball_pos[2]
-        
-        # Calculate ball speed
-        ball_speed = np.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
+        ball_pos, ball_vel = self._get_ball_obs()
+        ball_y     = ball_pos[1]                             # qpos_y
+        ball_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
 
-        # PRIMARY REWARDS: Goals (dominant - keep these large)
-        victory = 1000 * DIRECTION_CHANGE if ball_y >  TABLE_MAX_Y_DIM else 0  # Ball in antagonist's goal
-        loss = -1000 * DIRECTION_CHANGE if ball_y < -1.0 * TABLE_MAX_Y_DIM else 0  # Ball in protagonist's goal
+        # 1. GOALS — dominant signal ±3000 ──────────────────────────────────────
+        victory = 3000.0 if ball_y >  TABLE_MAX_Y_DIM else 0.0
+        loss    = -3000.0 if ball_y < -TABLE_MAX_Y_DIM else 0.0
 
-        # CURRICULUM LEARNING REWARDS: Help agent learn to interact with ball
-        
-        # 1. CONTACT REWARDS: Reward for getting foosmen near the ball
-        #    Use ball body xpos (world frame) and only X-Y distance.
-        #    Ball body is at z~1.7, foosmen bodies at z~6.3 — using 3D distance
-        #    would make the minimum distance ~4.5, preventing close-contact rewards.
+        # Ball world-frame XY (for proximity & position rewards)
+        ball_bid      = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
+        ball_world    = self.data.body(ball_bid).xpos
+        ball_world_xy = ball_world[:2]
+
+        # 2. CONTACT PROXIMITY — guides early exploration toward the ball ───────
         contact_reward = 0.0
-        ball_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
-        ball_world_xy = self.data.body(ball_body_id).xpos[:2].copy()
-        
-        # Check protagonist's foosmen (yellow team)
         for rod in RODS:
-            # Get positions of guys on this rod
-            for guy_num in range(1, 6):  # Max 5 guys per rod
-                guy_name = f"y{rod}guy{guy_num}"
-                try:
-                    guy_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, guy_name)
-                    guy_xy = self.data.body(guy_body_id).xpos[:2].copy()
-                    distance = np.linalg.norm(ball_world_xy - guy_xy)
-                    
-                    # Reward proximity, but keep it small enough that kicking is better
-                    if distance < 10.0:
-                        contact_reward += 5.0 / (distance + 1.0)
-                    
-                    # Reward for close contact — now actually reachable with 2D distance
-                    if distance < 3.0:
-                        contact_reward += 10.0
-                except:
-                    continue  # Guy doesn't exist on this rod
-        
-        # 2. BALL MOVEMENT REWARDS: Buffed to encourage violent strikes
-        movement_reward = 0.0
-        if ball_speed > 0.1:
-            movement_reward += ball_speed * 50.0  # Was 10.0. Massive multiplier for speed.
-        
-        # Extra reward for a solid strike
-        if ball_speed > 1.0:                      # Was 0.5. Changed threshold to reward actual hits.
-            movement_reward += 200.0              # Was 50.0. Big bonus for a hard kick.
-        
-        # 3. DIRECTIONAL REWARDS: Reward ball moving toward opponent goal - MASSIVELY INCREASED
-        directional_reward = 0.0
-        if ball_vel[1] > 0:  # Moving toward opponent (positive Y)
-            directional_reward += ball_vel[1] * 25.0  # Was 5.0
-            # Extra bonus if moving fast in right direction
-            if ball_vel[1] > 2.0:
-                directional_reward += 75.0  # Was 15.0
-        
-        # 4. POSITION REWARDS: Small rewards for ball position (only when moving)
-        position_reward = 0
-        if ball_speed > 0.5:
-            position_reward = ball_y * 0.05  # Reduced from 0.1
-        
-        # 5. PENALTIES (reduced during learning phase)
-        time_penalty = -1.0  # Reduced from -2.0 to be less harsh
-        stagnant_penalty = -2.0 if ball_speed < 0.1 else 0  # Reduced from -5.0
-        
-        ctrl_cost = self.control_cost(protagonist_action)
+            for gn in range(1, 6):
+                gid = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_BODY, f"y{rod}guy{gn}")
+                if gid < 0:
+                    continue
+                dist = np.linalg.norm(ball_world_xy - self.data.body(gid).xpos[:2])
+                if dist < 8.0:
+                    contact_reward += 1.0 / (dist + 1.0)
+        contact_reward = min(contact_reward, 1.5)  # cap to prevent camping
 
-        # Combine all rewards
-        reward = (victory + loss + 
-                 contact_reward + movement_reward + directional_reward + 
-                 position_reward + time_penalty + stagnant_penalty - ctrl_cost)
+        # 3. BALL POSITION — continuous gradient toward opponent goal ────────────
+        #    ball_world[1] ∈ [-65, 65] → reward ∈ [-1.3, +1.3]
+        position_reward = ball_world[1] * 0.02
 
+        # 4. FORWARD VELOCITY — reward ball moving toward +Y ───────────────────
+        forward_reward = max(ball_vel[1], 0.0) * 0.5
+
+        # 5. PENALTIES ──────────────────────────────────────────────────────────
+        time_penalty     = -0.5
+        stagnant_penalty = -1.5 if ball_speed < 0.1 else 0.0
+        ctrl_cost        = self.control_cost(protagonist_action)
+
+        reward = (victory + loss
+                  + contact_reward + position_reward + forward_reward
+                  + time_penalty + stagnant_penalty - ctrl_cost)
         return reward
 
     @property
