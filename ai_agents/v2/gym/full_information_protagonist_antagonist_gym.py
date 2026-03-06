@@ -149,18 +149,65 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self.play_until_goal = play_until_goal
         self.verbose_mode = verbose_mode
 
+        # ── Cache ALL MuJoCo IDs once (avoids ~100+ mj_name2id per step) ──────
+        self._cache_ids()
+
     def set_antagonist_model(self, antagonist_model):
         self.antagonist_model = antagonist_model
+
+    def _cache_ids(self):
+        """Pre-resolve every MuJoCo name→id mapping used in step/reward/obs."""
+        _jid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, n)
+        _bid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
+
+        # Ball joints
+        bx = _jid('ball_x');  by = _jid('ball_y')
+        self._bx_qpos = self.model.jnt_qposadr[bx]
+        self._by_qpos = self.model.jnt_qposadr[by]
+        self._bx_dof  = self.model.jnt_dofadr[bx]
+        self._by_dof  = self.model.jnt_dofadr[by]
+        self._ball_bid = _bid('ball')
+
+        # Rod joints: slide + rotation for both players (used by _get_obs)
+        self._rod_slide_qpos = []
+        self._rod_slide_dof  = []
+        self._rod_rot_qpos   = []
+        self._rod_rot_dof    = []
+        for player in ['y', 'b']:
+            for rod in RODS:
+                sj = _jid(f"{player}{rod}linear")
+                rj = _jid(f"{player}{rod}rotation")
+                self._rod_slide_qpos.append(self.model.jnt_qposadr[sj])
+                self._rod_slide_dof.append(self.model.jnt_dofadr[sj])
+                self._rod_rot_qpos.append(self.model.jnt_qposadr[rj])
+                self._rod_rot_dof.append(self.model.jnt_dofadr[rj])
+
+        # Kick/reward: rotation joint qpos addrs per rod, guy body ids
+        # Organised as list of (kick_dir, rot_qpos_adr, [guy_body_ids])
+        self._kick_rods = []
+        for player in ['y', 'b']:
+            kick_dir = 1.0 if player == 'y' else -1.0
+            for rod in RODS:
+                rj = _jid(f"{player}{rod}rotation")
+                rot_qpos = self.model.jnt_qposadr[rj]
+                guys = []
+                for g in range(1, 6):
+                    gid = _bid(f"{player}{rod}guy{g}")
+                    if gid >= 0:
+                        guys.append(gid)
+                self._kick_rods.append((kick_dir, rot_qpos, guys))
+
+        # Protagonist (yellow) guy body ids only — for contact reward
+        self._yellow_guy_bids = []
+        for rod in RODS:
+            for g in range(1, 6):
+                gid = _bid(f"y{rod}guy{g}")
+                if gid >= 0:
+                    self._yellow_guy_bids.append(gid)
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
-
-        ball_x_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_x')
-        ball_y_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_y')
-
-        x_qpos_adr = self.model.jnt_qposadr[ball_x_id]
-        y_qpos_adr = self.model.jnt_qposadr[ball_y_id]
 
         # Ball body pos is (0, -4, 1.705), so qpos_y=4 → world Y≈0 (field centre).
         xy_random = np.random.normal(
@@ -168,11 +215,11 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             scale=[0.5, 0.5]
         )
 
-        self.data.qpos[x_qpos_adr] = xy_random[0]
-        self.data.qpos[y_qpos_adr] = xy_random[1]
+        self.data.qpos[self._bx_qpos] = xy_random[0]
+        self.data.qpos[self._by_qpos] = xy_random[1]
 
         self.simulation_time = 0
-        self.prev_ball_y = self.data.qpos[y_qpos_adr]
+        self.prev_ball_y = self.data.qpos[self._by_qpos]
         self.no_progress_steps = 0
         self.ball_stopped_count = 0
         self._kick_cooldown = 0
@@ -211,25 +258,17 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         return obs, reward, terminated, False, info
 
     def _get_ball_obs(self):
-        ball_x_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_x')
-        ball_y_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_y')
-        x_qpos_adr = self.model.jnt_qposadr[ball_x_id]
-        y_qpos_adr = self.model.jnt_qposadr[ball_y_id]
-        x_qvel_adr = self.model.jnt_dofadr[ball_x_id]
-        y_qvel_adr = self.model.jnt_dofadr[ball_y_id]
-        # ball_z joint does not exist in the v2 XML — ball sits on table surface.
-        # Return 0.0 for z pos/vel to keep observation space at 38-dim.
+        # Uses cached addresses — zero mj_name2id calls.
         ball_pos = [
-            self.data.qpos[x_qpos_adr],
-            self.data.qpos[y_qpos_adr],
+            self.data.qpos[self._bx_qpos],
+            self.data.qpos[self._by_qpos],
             0.0
         ]
         ball_vel = [
-            self.data.qvel[x_qvel_adr],
-            self.data.qvel[y_qvel_adr],
+            self.data.qvel[self._bx_dof],
+            self.data.qvel[self._by_dof],
             0.0
         ]
-
         return ball_pos, ball_vel
 
     def _get_antagonist_obs(self):
@@ -244,28 +283,12 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         rod_rotate_positions = []
         rod_rotate_velocities = []
 
-        # Collect observations for both players' rods
-        for player in ['y', 'b']:
-            for rod in RODS:
-                # Linear joints
-                slide_joint_name = f"{player}{rod}linear"
-                slide_joint_id = mujoco.mj_name2id(
-                    self.model, mujoco.mjtObj.mjOBJ_JOINT, slide_joint_name
-                )
-                slide_qpos_adr = self.model.jnt_qposadr[slide_joint_id]
-                slide_qvel_adr = self.model.jnt_dofadr[slide_joint_id]
-                rod_slide_positions.append(self.data.qpos[slide_qpos_adr])
-                rod_slide_velocities.append(self.data.qvel[slide_qvel_adr])
-
-                # Rotational joints
-                rotate_joint_name = f"{player}{rod}rotation"
-                rotate_joint_id = mujoco.mj_name2id(
-                    self.model, mujoco.mjtObj.mjOBJ_JOINT, rotate_joint_name
-                )
-                rotate_qpos_adr = self.model.jnt_qposadr[rotate_joint_id]
-                rotate_qvel_adr = self.model.jnt_dofadr[rotate_joint_id]
-                rod_rotate_positions.append(self.data.qpos[rotate_qpos_adr])
-                rod_rotate_velocities.append(self.data.qvel[rotate_qvel_adr])
+        # Uses cached addresses — zero mj_name2id calls
+        for i in range(len(self._rod_slide_qpos)):
+            rod_slide_positions.append(self.data.qpos[self._rod_slide_qpos[i]])
+            rod_slide_velocities.append(self.data.qvel[self._rod_slide_dof[i]])
+            rod_rotate_positions.append(self.data.qpos[self._rod_rot_qpos[i]])
+            rod_rotate_velocities.append(self.data.qvel[self._rod_rot_dof[i]])
 
         obs = np.concatenate([
             ball_pos,
@@ -297,37 +320,22 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             self._kick_cooldown -= 1
             return
 
-        ball_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
-        ball_xy  = self.data.body(ball_bid).xpos[:2]
+        ball_xy = self.data.body(self._ball_bid).xpos[:2]
 
-        bx_jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_x')
-        by_jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'ball_y')
-        bx_dof = self.model.jnt_dofadr[bx_jid]
-        by_dof = self.model.jnt_dofadr[by_jid]
-
-        for player in ['y', 'b']:
-            kick_dir = 1.0 if player == 'y' else -1.0
-            for rod in RODS:
-                rot_jid = mujoco.mj_name2id(
-                    self.model, mujoco.mjtObj.mjOBJ_JOINT, f"{player}{rod}rotation")
-                rot_angle = self.data.qpos[self.model.jnt_qposadr[rot_jid]]
-                if abs(rot_angle) < KICK_MIN_ROT:
-                    continue
-
-                for g in range(1, 6):
-                    gid = mujoco.mj_name2id(
-                        self.model, mujoco.mjtObj.mjOBJ_BODY, f"{player}{rod}guy{g}")
-                    if gid < 0:
-                        continue
-                    guy_xy = self.data.body(gid).xpos[:2]
-                    dist   = np.linalg.norm(ball_xy - guy_xy)
-                    if dist < KICK_RADIUS:
-                        strength = min(abs(rot_angle), 1.5) / 1.5   # 0→1
-                        impulse  = KICK_SPEED * strength * (1.0 - dist / KICK_RADIUS)
-                        self.data.qvel[by_dof] += kick_dir * impulse
-                        self.data.qvel[bx_dof] += (ball_xy[0] - guy_xy[0]) * 1.5
-                        self._kick_cooldown = KICK_COOLDOWN
-                        return  # one kick per step
+        for kick_dir, rot_qpos, guys in self._kick_rods:
+            rot_angle = self.data.qpos[rot_qpos]
+            if abs(rot_angle) < KICK_MIN_ROT:
+                continue
+            for gid in guys:
+                guy_xy = self.data.body(gid).xpos[:2]
+                dist   = np.linalg.norm(ball_xy - guy_xy)
+                if dist < KICK_RADIUS:
+                    strength = min(abs(rot_angle), 1.5) / 1.5
+                    impulse  = KICK_SPEED * strength * (1.0 - dist / KICK_RADIUS)
+                    self.data.qvel[self._by_dof] += kick_dir * impulse
+                    self.data.qvel[self._bx_dof] += (ball_xy[0] - guy_xy[0]) * 1.5
+                    self._kick_cooldown = KICK_COOLDOWN
+                    return
 
     def euclidean_goal_distance(self, x, y):
         return math.sqrt((x - 0) ** 2 + (y - TABLE_MAX_Y_DIM) ** 2)
@@ -335,39 +343,34 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
     # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
         ball_pos, ball_vel = self._get_ball_obs()
-        ball_y     = ball_pos[1]                             # qpos_y
+        ball_y     = ball_pos[1]
         ball_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
 
-        # 1. GOALS — dominant signal ±3000 ──────────────────────────────────────
+        # 1. GOALS — dominant signal ±3000
         victory = 3000.0 if ball_y >  TABLE_MAX_Y_DIM else 0.0
         loss    = -3000.0 if ball_y < -TABLE_MAX_Y_DIM else 0.0
 
-        # Ball world-frame XY (for proximity & position rewards)
-        ball_bid      = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
-        ball_world    = self.data.body(ball_bid).xpos
-        ball_world_xy = ball_world[:2]
+        # Ball world-frame XY
+        ball_world_xy = self.data.body(self._ball_bid).xpos[:2]
 
-        # 2. CONTACT PROXIMITY — guides early exploration toward the ball ───────
+        # 2. CONTACT PROXIMITY — uses cached yellow guy body ids
         contact_reward = 0.0
-        for rod in RODS:
-            for gn in range(1, 6):
-                gid = mujoco.mj_name2id(
-                    self.model, mujoco.mjtObj.mjOBJ_BODY, f"y{rod}guy{gn}")
-                if gid < 0:
-                    continue
-                dist = np.linalg.norm(ball_world_xy - self.data.body(gid).xpos[:2])
-                if dist < 8.0:
-                    contact_reward += 1.0 / (dist + 1.0)
-        contact_reward = min(contact_reward, 1.5)  # cap to prevent camping
+        for gid in self._yellow_guy_bids:
+            dx = ball_world_xy[0] - self.data.body(gid).xpos[0]
+            dy = ball_world_xy[1] - self.data.body(gid).xpos[1]
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < 8.0:
+                contact_reward += 1.0 / (dist + 1.0)
+        if contact_reward > 1.5:
+            contact_reward = 1.5
 
-        # 3. BALL POSITION — continuous gradient toward opponent goal ────────────
-        #    ball_world[1] ∈ [-65, 65] → reward ∈ [-1.3, +1.3]
-        position_reward = ball_world[1] * 0.02
+        # 3. BALL POSITION — continuous gradient toward opponent goal
+        position_reward = self.data.body(self._ball_bid).xpos[1] * 0.02
 
-        # 4. FORWARD VELOCITY — reward ball moving toward +Y ───────────────────
+        # 4. FORWARD VELOCITY — reward ball moving toward +Y
         forward_reward = max(ball_vel[1], 0.0) * 0.5
 
-        # 5. PENALTIES ──────────────────────────────────────────────────────────
+        # 5. PENALTIES
         time_penalty     = -0.5
         stagnant_penalty = -1.5 if ball_speed < 0.1 else 0.0
         ctrl_cost        = self.control_cost(protagonist_action)
