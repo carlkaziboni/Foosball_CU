@@ -265,11 +265,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             antagonist_result = self.antagonist_model.predict(antagonist_observation)
             # SB3 SAC.predict() returns (action, state) tuple — unwrap it
             antagonist_action = antagonist_result[0] if isinstance(antagonist_result, tuple) else antagonist_result
-            antagonist_action = np.clip(antagonist_action, -1.0, 1.0)
-
-            # Scale from [-1,1] to same range as protagonist (±20) so both
-            # teams have equal control authority, then mirror directions.
-            antagonist_action = antagonist_action * 20.0
+            # SAC model was trained with action_space [-20, 20] and SB3 already
+            # rescales tanh output to action_space range — clip to that range only.
+            antagonist_action = np.clip(antagonist_action, -20.0, 20.0)
             antagonist_action = self._adjust_antagonist_action(antagonist_action)
         else:
             antagonist_action = np.zeros(self.antagonist_action_size)
