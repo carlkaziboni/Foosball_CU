@@ -307,8 +307,36 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         return ball_pos, ball_vel
 
     def _get_antagonist_obs(self):
-        # Full-information env: antagonist sees the same state as protagonist
-        return self._get_obs()
+        """Return a perspective-flipped observation for the antagonist (blue team).
+
+        From blue's point of view:
+          - Ball Y is negated (their goal is at -Y, so +Y means moving away from them).
+          - Ball Y velocity is negated for the same reason.
+          - The rod blocks are swapped so blue's own rods appear first in the vector,
+            matching how yellow's rods are ordered for the protagonist.
+
+        Obs layout (38-dim):
+          [0:3]   ball_pos  (x, y, 0)
+          [3:6]   ball_vel  (vx, vy, 0)
+          [6:14]  rod_slide_positions  (team0 × 4, team1 × 4)
+          [14:22] rod_slide_velocities
+          [22:30] rod_rotate_positions
+          [30:38] rod_rotate_velocities
+        """
+        obs = self._get_obs().copy()
+
+        # Flip ball Y position and velocity
+        obs[1] = -obs[1]   # ball_pos y
+        obs[4] = -obs[4]   # ball_vel vy
+
+        # Swap yellow (indices 0-3) and blue (indices 4-7) blocks in each rod group
+        for base in (6, 14, 22, 30):
+            y_block = obs[base:base + 4].copy()
+            b_block = obs[base + 4:base + 8].copy()
+            obs[base:base + 4]     = b_block
+            obs[base + 4:base + 8] = y_block
+
+        return obs
 
     def _get_obs(self):
         ball_pos, ball_vel = self._get_ball_obs()
