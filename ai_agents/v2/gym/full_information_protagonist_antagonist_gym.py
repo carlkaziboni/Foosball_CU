@@ -445,10 +445,10 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         ball_world_y = self.data.body(self._ball_bid).xpos[1]
         ball_world_x = self.data.body(self._ball_bid).xpos[0]
 
-        # 1. GOALS — dominant signal ±3000 (only if ball is inside goal opening)
+        # 1. GOALS — dominant signal ±5000 (only if ball is inside goal opening)
         in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
-        victory = 3000.0  if (ball_world_y >  TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
-        loss    = -3000.0 if (ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
+        victory = 5000.0  if (ball_world_y >  TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
+        loss    = -5000.0 if (ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
 
         # Ball world-frame XY
         ball_world_xy = self.data.body(self._ball_bid).xpos[:2]
@@ -461,23 +461,27 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             dist = math.sqrt(dx*dx + dy*dy)
             if dist < 8.0:
                 contact_reward += 1.0 / (dist + 1.0)
-        if contact_reward > 1.5:
-            contact_reward = 1.5
+        if contact_reward > 3.0:
+            contact_reward = 3.0
 
-        # 3. BALL POSITION — continuous gradient toward opponent goal
-        position_reward = self.data.body(self._ball_bid).xpos[1] * 0.02
+        # 3. BALL POSITION — reward ball in opponent half, penalise ball in own half
+        position_reward   =  max(ball_world_y, 0.0) * 0.02   # positive only above centre
+        defensive_penalty =  min(ball_world_y + 30.0, 0.0) * 0.03  # 0 above Y=-30, negative below
 
-        # 4. FORWARD VELOCITY — reward ball moving toward +Y
-        forward_reward = max(ball_vel[1], 0.0) * 0.5
+        # 4. VELOCITY — reward ball moving toward +Y, penalise ball moving toward -Y
+        forward_reward  =  max(ball_vel[1],  0.0) * 0.5
+        backward_penalty = min(ball_vel[1],  0.0) * 0.2   # negative if ball going backward
 
         # 5. PENALTIES
-        time_penalty     = -0.5
-        stagnant_penalty = -1.5 if ball_speed < 0.1 else 0.0
-        ctrl_cost        = self.control_cost(protagonist_action)
+        time_penalty = -0.5
+        ctrl_cost    = self.control_cost(protagonist_action)  # already positive, subtracted below
 
         reward = (victory + loss
-                  + contact_reward + position_reward + forward_reward
-                  + time_penalty + stagnant_penalty - ctrl_cost)
+                  + contact_reward
+                  + position_reward + defensive_penalty
+                  + forward_reward  + backward_penalty
+                  + time_penalty
+                  - ctrl_cost)
         return reward
 
     @property
@@ -488,15 +492,10 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         )
 
     def control_cost(self, action):
-        # 2-norm
-        #control_cost = self._ctrl_cost_weight * np.sum(np.square(action)) * -1.0
-
-        # 1-norm
-        control_cost = self._ctrl_cost_weight * np.sum(np.abs(action)) * -1.0
-
-        # L0 norm
-        #control_cost = self._ctrl_cost_weight * np.count_nonzero(action) * -1.0
-
+        # 1-norm — returns a positive number; caller subtracts it from reward.
+        # Previously multiplied by -1 here, then reward did `- ctrl_cost`,
+        # which double-negated and accidentally REWARDED large actions. Fixed.
+        control_cost = self._ctrl_cost_weight * np.sum(np.abs(action))
         return control_cost
 
     @property

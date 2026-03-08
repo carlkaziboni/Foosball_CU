@@ -21,10 +21,11 @@ from stable_baselines3 import SAC
 from ai_agents.v2.gym.full_information_protagonist_antagonist_gym import FoosballEnv
 
 # ── Pick checkpoint ────────────────────────────────────────────────────────────
-MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models_kaggle")
-
 checkpoint_name = sys.argv[1] if len(sys.argv) > 1 else "best_model"
 opponent_mode   = sys.argv[2] if len(sys.argv) > 2 else "self"   # "self" or "random"
+models_dir_name = sys.argv[3] if len(sys.argv) > 3 else "models_kaggle"  # e.g. "models_new"
+
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), models_dir_name)
 
 CHECKPOINT_PATH = os.path.join(MODELS_DIR, "0", "sac", checkpoint_name, "model.zip")
 
@@ -64,6 +65,7 @@ class RandomAntagonist:
 
 print("=" * 60)
 print(f"  Foosball — Kaggle Model Visualization")
+print(f"  Models dir : {models_dir_name}")
 print(f"  Checkpoint : {checkpoint_name}")
 print(f"  Path       : {CHECKPOINT_PATH}")
 print(f"  Opponent   : {'self (model vs model)' if opponent_mode == 'self' else 'random'}")
