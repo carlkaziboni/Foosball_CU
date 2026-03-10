@@ -44,8 +44,8 @@ XML_PATH = os.path.join(SCRIPT_DIR, "foosball_sim", "v2", "foosball_sim.xml")
 # --- Simulation settings ---------------------------------------------------
 MAX_SECONDS = 60          # Max episode wall-clock time
 REALTIME    = True        # Sync to wall clock (False = as fast as possible)
-KICK_SPEED  = 200.0       # Ball Y-velocity applied on a "hit"
-DEFLECT_X   = 15.0        # Random X-deflection on hits
+KICK_SPEED  = 120.0       # Ball Y-velocity applied on a "hit"
+DEFLECT_X   = 8.0         # Random X-deflection on hits
 
 # --- Rod definitions (yellow protagonist) ----------------------------------
 RODS = [
@@ -53,44 +53,44 @@ RODS = [
         "name": "goal",
         "body": "y_goal_rod",
         "linear_ctrl": 0,   "rot_ctrl": 1,
-        "ctrl_range_linear": (-10.0, 10.0),
+        "ctrl_range_linear": (-8.25, 8.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["y_goal_guy1", "y_goal_guy2", "y_goal_guy3"],
-        "rod_y": -52.5,
+        "guys": ["y_goal_guy1"],
+        "rod_y": -33.25,
     },
     {
         "name": "def",
         "body": "y_def_rod",
         "linear_ctrl": 2,   "rot_ctrl": 3,
-        "ctrl_range_linear": (-20.0, 20.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["y_def_guy1", "y_def_guy2"],
-        "rod_y": -37.5,
+        "guys": ["y_def_guy1", "y_def_guy2", "y_def_guy3"],
+        "rod_y": -23.75,
     },
     {
         "name": "mid",
         "body": "y_mid_rod",
         "linear_ctrl": 4,   "rot_ctrl": 5,
-        "ctrl_range_linear": (-7.0, 7.0),
+        "ctrl_range_linear": (-8.95, 8.95),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["y_mid_guy1", "y_mid_guy2", "y_mid_guy3", "y_mid_guy4", "y_mid_guy5"],
-        "rod_y": -7.5,
+        "guys": ["y_mid_guy1", "y_mid_guy2", "y_mid_guy3", "y_mid_guy4"],
+        "rod_y": -4.75,
     },
     {
         "name": "attack",
         "body": "y_attack_rod",
         "linear_ctrl": 6,   "rot_ctrl": 7,
-        "ctrl_range_linear": (-12.0, 12.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
         "guys": ["y_attack_guy1", "y_attack_guy2", "y_attack_guy3"],
-        "rod_y": 22.5,
+        "rod_y": 14.25,
     },
 ]
 
 # --- Control parameters ----------------------------------------------------
-STRIKE_ZONE_Y  = 18.0    # |dy| < this -> trigger full strike
-TRACK_ZONE_Y   = 35.0    # |dy| < this -> track ball laterally & wind up
-HIT_RADIUS_XY  = 15.0    # Proximity (X-Y plane) to count as a "hit"
+STRIKE_ZONE_Y  = 12.0    # |dy| < this -> trigger full strike
+TRACK_ZONE_Y   = 20.0    # |dy| < this -> track ball laterally & wind up
+HIT_RADIUS_XY  = 8.0     # Proximity (X-Y plane) to count as a "hit"
 
 
 # ===========================================================================
@@ -305,7 +305,7 @@ def detect_and_kick(data, ids, phases, verbose=False):
 def reset_sim(model, data, ids):
     """Reset sim. Ball starts near midfield where mid rod can immediately hit it."""
     mujoco.mj_resetData(model, data)
-    # Place ball between mid rod (y=-7.5) and attack rod (y=22.5)
+    # Place ball between mid rod (y=-4.75) and attack rod (y=14.25)
     data.qpos[ids["ball_qpos_x"]] = np.random.uniform(-3, 3)
     data.qpos[ids["ball_qpos_y"]] = np.random.uniform(-2, 2)  # world y near -4 to 0
     mujoco.mj_forward(model, data)
@@ -313,7 +313,7 @@ def reset_sim(model, data, ids):
 
 def clamp_ball_to_field(data, ids):
     """Bounce the ball off side walls (table mesh collision is off)."""
-    WALL_X = 33.0   # side walls at approximately +/-33
+    WALL_X = 24.25  # side walls at approximately +/-24.25
     bx = data.qpos[ids["ball_qpos_x"]]
     if abs(bx) > WALL_X:
         data.qpos[ids["ball_qpos_x"]] = np.clip(bx, -WALL_X, WALL_X)
@@ -336,9 +336,9 @@ def nudge_stale_ball(data, ids, stale_counter):
 
 def check_goal(data, ids):
     _, by = get_ball_xy(data, ids)
-    if by > 65:
+    if by > 40.5:
         return "scored"
-    elif by < -65:
+    elif by < -40.5:
         return "conceded"
     return None
 

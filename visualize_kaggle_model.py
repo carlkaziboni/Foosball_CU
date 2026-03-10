@@ -120,10 +120,10 @@ try:
         episode_rewards.append(total_reward)
 
         outcome = ""
-        if ball_y > 65:
+        if ball_y > 40.5:
             outcome = "  ⚽ GOAL SCORED!"
             goals_scored += 1
-        elif ball_y < -65:
+        elif ball_y < -40.5:
             outcome = "  ❌ GOAL CONCEDED"
             goals_conceded += 1
         else:

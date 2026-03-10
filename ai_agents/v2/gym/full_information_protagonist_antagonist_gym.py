@@ -47,17 +47,17 @@ def _patch_model(model):
                     model.geom_conaffinity[gid] = 1
 
     # 2. Ball joint limits & friction
-    #    Side-wall rubber geoms sit at Z=7.75, ball at Z=1.705 — collision can't
-    #    contain it.  Hard joint limits on ball_x keep it inside the field (±32).
+    #    Side-wall rubber geoms sit at Z=4.8, ball at Z=1.55.
+    #    Hard joint limits on ball_x keep it inside the field (±24.25).
     bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
     if bx_jid >= 0:
         model.jnt_limited[bx_jid] = 1
-        model.jnt_range[bx_jid] = [-32.0, 32.0]   # walls at ±33.75
+        model.jnt_range[bx_jid] = [-24.25, 24.25]   # walls at ±24.25
         model.dof_frictionloss[model.jnt_dofadr[bx_jid]] = 0.2
     by_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_y")
     if by_jid >= 0:
         model.jnt_limited[by_jid] = 1
-        model.jnt_range[by_jid] = [-70.0, 78.0]   # generous: goals at world ±65
+        model.jnt_range[by_jid] = [-45.0, 50.0]   # generous: goals at world ±40.5
         model.dof_frictionloss[model.jnt_dofadr[by_jid]] = 0.2
 
     # 3. Rotation joints: moderate damping, armature for stability, limit range
@@ -87,7 +87,7 @@ def _patch_model(model):
 from ai_agents.v2.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
 
 DIRECTION_CHANGE = 1
-TABLE_MAX_Y_DIM = 65
+TABLE_MAX_Y_DIM = 40.5
 BALL_STOPPED_COUNT_THRESHOLD = 300
 MAX_EPISODE_STEPS = 1500              # actual env.step() calls, NOT simulation time
 
@@ -97,15 +97,15 @@ RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
 # Foosman collision is disabled (capsules block the ball).  Instead, when a
 # foosman is close to the ball *and* the rod is rotated past a threshold,
 # we inject a velocity impulse into the ball — exactly like dual_play.py.
-KICK_RADIUS   = 10.0   # X-Y proximity to trigger a kick (foosman Y spacing ~15-30)
-KICK_SPEED    = 120.0  # peak impulse magnitude — needs to be large for 130-unit field
+KICK_RADIUS   = 6.0    # X-Y proximity to trigger a kick (foosman spacing ~10-15)
+KICK_SPEED    = 80.0   # peak impulse magnitude — scaled for 81-unit field
 KICK_MIN_ROT  = 0.3    # minimum |rotation| angle (rad) to count as a kick
 KICK_COOLDOWN = 10     # steps between consecutive kicks
 
 # ── Goal / wall parameters ───────────────────────────────────────────────────────────────
-GOAL_HALF_WIDTH  = 15.0   # half-width of goal opening in X (±15 ≈ 30 units)
-WALL_Y           = 65.0   # world-Y position of each end wall
-WALL_X           = 32.0   # world-X position of each side wall
+GOAL_HALF_WIDTH  = 4.0    # half-width of goal opening in X (±4 = 8 cm)
+WALL_Y           = 40.5   # world-Y position of each end wall
+WALL_X           = 24.25  # world-X position of each side wall
 WALL_RESTITUTION = 0.95   # coefficient of restitution for ALL wall bounces
 
 class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
@@ -139,21 +139,20 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         )
 
         self.goal_linear_action_space = spaces.Box(
-            low=-10.0 * action_high, high=10.0 * action_high, dtype=np.float32
+            low=-8.25 * action_high, high=8.25 * action_high, dtype=np.float32
         )
         self.def_linear_action_space = spaces.Box(
-            low=-20.0 * action_high, high=20.0 * action_high, dtype=np.float32
+            low=-9.25 * action_high, high=9.25 * action_high, dtype=np.float32
         )
         self.mid_linear_action_space = spaces.Box(
-            low=-7.0 * action_high, high=7.0 * action_high, dtype=np.float32
+            low=-8.95 * action_high, high=8.95 * action_high, dtype=np.float32
         )
         self.attack_linear_action_space = spaces.Box(
-            low=-12.0 * action_high, high=12.0 * action_high, dtype=np.float32
+            low=-9.25 * action_high, high=9.25 * action_high, dtype=np.float32
         )
 
-        # TEMP
         self.action_space = spaces.Box(
-            low=-20 * action_high, high=20 * action_high, dtype=np.float32
+            low=-10 * action_high, high=10 * action_high, dtype=np.float32
         )
 
         obs_dim = 38
@@ -166,7 +165,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         self._healthy_reward = 1.0
         self._ctrl_cost_weight = 0.005
         self._terminate_when_unhealthy = True
-        self._healthy_z_range = (-80, 80)
+        self._healthy_z_range = (-50, 50)
         self.max_no_progress_steps = 500
 
         self.prev_ball_y = None
@@ -238,7 +237,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
 
-        # Ball body pos is (0, -4, 1.705), so qpos_y=4 → world Y≈0 (field centre).
+        # Ball body pos is (0, -4, 1.55), so qpos_y=4 → world Y≈0 (field centre).
         xy_random = np.random.normal(
             loc=[0.0, 4.0],
             scale=[0.5, 0.5]
@@ -265,9 +264,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
             antagonist_result = self.antagonist_model.predict(antagonist_observation)
             # SB3 SAC.predict() returns (action, state) tuple — unwrap it
             antagonist_action = antagonist_result[0] if isinstance(antagonist_result, tuple) else antagonist_result
-            # SAC model was trained with action_space [-20, 20] and SB3 already
+            # SAC model was trained with action_space [-10, 10] and SB3 already
             # rescales tanh output to action_space range — clip to that range only.
-            antagonist_action = np.clip(antagonist_action, -20.0, 20.0)
+            antagonist_action = np.clip(antagonist_action, -10.0, 10.0)
             antagonist_action = self._adjust_antagonist_action(antagonist_action)
         else:
             antagonist_action = np.zeros(self.antagonist_action_size)
