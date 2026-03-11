@@ -1,5 +1,4 @@
 <mujoco>
-    <compiler texturedir="asset"/>
 
     <statistic meansize=".05"/>
 
@@ -8,12 +7,6 @@
     </default>
 
     <asset>
-      <texture name="field_pattern" type="2d" file="field.png"/>
-      <material name="field" texture="field_pattern"/>
-
-      <texture name="black_color" type="2d" file="black.png"/>
-      <material name="black" texture="black_color"/>
-
       <mesh name="outside_rubber" file="asset/outside_rubber/table_outside_rubber.obj" scale='0.1 0.1 0.1'/>
     </asset>
 
@@ -24,9 +17,10 @@
         <geom type="plane" size="500 500 .01" rgba="1.0 1.0 1.0 1.0" contype="0" conaffinity="0"/>
       </body>
 
-      <!-- Playing field: half-width=24.25, half-length=40.5 (real 48.5×81 cm) -->
-      <body name="ground" pos="0 0 -0.03" euler="0 0 180">
-        <geom type="plane" size="24.25 40.5 0.01" material="field" friction="0.01 0.1 10"/>
+      <!-- Playing field: half-width=24.25, half-length=40.5 (real 48.5×81 cm)
+           Box top surface at Z=0 (the playing surface). -->
+      <body name="ground" pos="0 0 -0.5" euler="0 0 180">
+        <geom type="box" size="24.25 40.5 0.5" rgba="0.1 0.55 0.15 1" friction="0.01 0.1 10"/>
       </body>
 
     <!-- ════════════════════════════════════════════════════════════════════
@@ -168,22 +162,88 @@
         <geom contype="0" conaffinity="0" type="mesh" mesh="outside_rubber" rgba='0.05 0.05 0.05 1' group="2"/>
       </body>
 
-    <!-- Table surface painting (end zones + side strips) -->
-      <body name="table_surface_1">
-        <geom type="plane" pos="0 -43.5 6" size="24.25 3.5 0.01"
-              contype="0" conaffinity="0" rgba='0.05 0.05 0.05 1' group="2"/>
+    <!-- ════════════════════════════════════════════════════════════════════
+         Visible WALLS (brown) and GOALS (white posts + crossbar)
+         All visual-only (contype=0 conaffinity=0) — physics bounces
+         are handled in code by the gym env.
+         ════════════════════════════════════════════════════════════════════ -->
+
+      <!-- SIDE WALLS — long brown boxes along the full length -->
+      <!-- Left wall at X = -24.25 -->
+      <body name="wall_left" pos="-24.75 0 3">
+        <geom type="box" size="0.5 40.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
       </body>
-      <body name="table_surface_2">
-        <geom type="plane" pos="0 43.5 6" size="24.25 3.5 0.01"
-              contype="0" conaffinity="0" rgba='0.05 0.05 0.05 1' group="2"/>
+      <!-- Right wall at X = +24.25 -->
+      <body name="wall_right" pos="24.75 0 3">
+        <geom type="box" size="0.5 40.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
       </body>
-      <body name="table_surface_3">
-        <geom type="plane" pos="-26 0 6" size="2 40.5 0.01"
-              contype="0" conaffinity="0" rgba='0.05 0.05 0.05 1' group="2"/>
+
+      <!-- END WALL — Yellow end (Y = -40.5), split around goal opening (X ±4.0) -->
+      <!-- Left segment: X from -24.25 to -4.0 → half-width 10.125, center X = -14.125 -->
+      <body name="wall_y_end_left" pos="-14.125 -41.0 3">
+        <geom type="box" size="10.125 0.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
       </body>
-      <body name="table_surface_4">
-        <geom type="plane" pos="26 0 6" size="2 40.5 0.01"
-              contype="0" conaffinity="0" rgba='0.05 0.05 0.05 1' group="2"/>
+      <!-- Right segment: X from 4.0 to 24.25 → center X = 14.125 -->
+      <body name="wall_y_end_right" pos="14.125 -41.0 3">
+        <geom type="box" size="10.125 0.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+
+      <!-- END WALL — Blue end (Y = +40.5), split around goal opening -->
+      <body name="wall_b_end_left" pos="-14.125 41.0 3">
+        <geom type="box" size="10.125 0.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <body name="wall_b_end_right" pos="14.125 41.0 3">
+        <geom type="box" size="10.125 0.5 3" rgba="0.45 0.28 0.12 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+
+      <!-- YELLOW GOAL (Y = -40.5) — white posts + crossbar, goal height 4.5cm -->
+      <!-- Left post -->
+      <body name="goal_y_post_left" pos="-4.0 -41.0 2.25">
+        <geom type="cylinder" size="0.3 2.25" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Right post -->
+      <body name="goal_y_post_right" pos="4.0 -41.0 2.25">
+        <geom type="cylinder" size="0.3 2.25" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Crossbar -->
+      <body name="goal_y_crossbar" pos="0 -41.0 4.5" euler="0 90 0">
+        <geom type="cylinder" size="0.3 4.0" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Back net (thin box behind goal) -->
+      <body name="goal_y_net" pos="0 -43.0 2.25">
+        <geom type="box" size="4.0 0.05 2.25" rgba="0.85 0.85 0.85 0.4"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+
+      <!-- BLUE GOAL (Y = +40.5) — white posts + crossbar -->
+      <!-- Left post -->
+      <body name="goal_b_post_left" pos="-4.0 41.0 2.25">
+        <geom type="cylinder" size="0.3 2.25" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Right post -->
+      <body name="goal_b_post_right" pos="4.0 41.0 2.25">
+        <geom type="cylinder" size="0.3 2.25" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Crossbar -->
+      <body name="goal_b_crossbar" pos="0 41.0 4.5" euler="0 90 0">
+        <geom type="cylinder" size="0.3 4.0" rgba="1 1 1 1"
+              contype="0" conaffinity="0" group="2"/>
+      </body>
+      <!-- Back net -->
+      <body name="goal_b_net" pos="0 43.0 2.25">
+        <geom type="box" size="4.0 0.05 2.25" rgba="0.85 0.85 0.85 0.4"
+              contype="0" conaffinity="0" group="2"/>
       </body>
 
     </worldbody>

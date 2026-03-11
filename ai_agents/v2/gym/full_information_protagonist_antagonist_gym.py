@@ -36,18 +36,17 @@ def _patch_model(model):
             model.geom_contype[i] = 1
             model.geom_conaffinity[i] = 1
 
-    # Re-enable foosman figure geoms (capsules + meshes) so ball bounces off them
+    # Re-enable foosman capsule geoms ONLY (visual meshes stay disabled)
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         for g in range(1, 6):
-            for suffix in [f"{prefix}_guy{g}", f"{prefix}_guy{g}_visual"]:
-                gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, suffix)
-                if gid >= 0:
-                    model.geom_contype[gid] = 1
-                    model.geom_conaffinity[gid] = 1
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"{prefix}_guy{g}")
+            if gid >= 0:
+                model.geom_contype[gid] = 1
+                model.geom_conaffinity[gid] = 1
 
     # 2. Ball joint limits & friction
-    #    Side-wall rubber geoms sit at Z=4.8, ball at Z=1.55.
+    #    Side-wall rubber geoms sit at Z=4.8, ball at Z=1.25.
     #    Hard joint limits on ball_x keep it inside the field (±24.25).
     bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
     if bx_jid >= 0:
@@ -225,13 +224,19 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
                         guys.append(gid)
                 self._kick_rods.append((kick_dir, rot_qpos, guys))
 
-        # Protagonist (yellow) guy body ids only — for contact reward
+        # Protagonist (yellow) guy body ids — all, plus split by role
         self._yellow_guy_bids = []
+        self._yellow_def_bids = []   # goalie + defense
+        self._yellow_atk_bids = []   # midfield + attack
         for rod in RODS:
             for g in range(1, 6):
                 gid = _bid(f"y{rod}guy{g}")
                 if gid >= 0:
                     self._yellow_guy_bids.append(gid)
+                    if rod in ("_goal_", "_def_"):
+                        self._yellow_def_bids.append(gid)
+                    else:
+                        self._yellow_atk_bids.append(gid)
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -437,48 +442,98 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
 
     # ── Reward function ────────────────────────────────────────────────────────
     def compute_reward(self, protagonist_action):
+        """Reward that encourages BOTH attacking and defensive play.
+
+        Components:
+          1. Goals scored / conceded         (±5000, terminal)
+          2. Ball position toward opp goal   (continuous)
+          3. Ball engagement — closest guy   (anti-sitting)
+          4. Offensive play — atk/mid near ball in opp half
+          5. Defensive play — def/gk near ball in own half
+          6. Shooting — ball velocity toward opp goal
+          7. Danger — ball flying toward own goal deep in own half
+          8. Ball activity — reward motion
+          9. Time + ctrl penalties
+        """
         ball_pos, ball_vel = self._get_ball_obs()
-        ball_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
+        ball_speed = math.sqrt(ball_vel[0] ** 2 + ball_vel[1] ** 2)
 
-        # Use world-frame Y for goal detection (ball body offset is -4)
-        ball_world_y = self.data.body(self._ball_bid).xpos[1]
-        ball_world_x = self.data.body(self._ball_bid).xpos[0]
+        ball_world = self.data.body(self._ball_bid).xpos
+        ball_world_x = ball_world[0]
+        ball_world_y = ball_world[1]
+        ball_xy = ball_world[:2]
 
-        # 1. GOALS — dominant signal ±5000 (only if ball is inside goal opening)
+        # ── 1. GOALS — dominant terminal signal ──────────────────────────────
         in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
-        victory = 5000.0  if (ball_world_y >  TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
-        loss    = -5000.0 if (ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening) else 0.0
+        if ball_world_y > TABLE_MAX_Y_DIM and in_goal_opening:
+            return 5000.0    # yellow scored
+        if ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening:
+            return -5000.0   # conceded
 
-        # Ball world-frame XY
-        ball_world_xy = self.data.body(self._ball_bid).xpos[:2]
+        # ── 2. BALL POSITION — push ball toward opponent goal ─────────────────
+        # Normalised [-1, 1].  Positive in opponent half, negative in own.
+        position_reward = (ball_world_y / TABLE_MAX_Y_DIM) * 1.0
 
-        # 2. CONTACT PROXIMITY — uses cached yellow guy body ids
-        contact_reward = 0.0
+        # ── 3. BALL ENGAGEMENT — closest yellow foosman to ball ──────────────
+        # Primary anti-sitting signal: 0 if nobody near, up to 2.0 on contact.
+        min_dist = 999.0
         for gid in self._yellow_guy_bids:
-            dx = ball_world_xy[0] - self.data.body(gid).xpos[0]
-            dy = ball_world_xy[1] - self.data.body(gid).xpos[1]
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist < 8.0:
-                contact_reward += 1.0 / (dist + 1.0)
-        if contact_reward > 3.0:
-            contact_reward = 3.0
+            dx = ball_xy[0] - self.data.body(gid).xpos[0]
+            dy = ball_xy[1] - self.data.body(gid).xpos[1]
+            d = math.sqrt(dx * dx + dy * dy)
+            if d < min_dist:
+                min_dist = d
+        engagement_reward = max(0.0, 2.0 * (1.0 - min_dist / 10.0))
 
-        # 3. BALL POSITION — reward ball in opponent half, penalise ball in own half
-        position_reward   =  max(ball_world_y, 0.0) * 0.02   # positive only above centre
-        defensive_penalty =  min(ball_world_y + 30.0, 0.0) * 0.03  # 0 above Y=-30, negative below
+        # ── 4. OFFENSIVE PLAY — attack/mid guys near ball in opponent half ───
+        attack_reward = 0.0
+        if ball_world_y > 0:
+            radius = KICK_RADIUS * 1.5
+            for gid in self._yellow_atk_bids:
+                dx = ball_xy[0] - self.data.body(gid).xpos[0]
+                dy = ball_xy[1] - self.data.body(gid).xpos[1]
+                d = math.sqrt(dx * dx + dy * dy)
+                if d < radius:
+                    attack_reward = max(attack_reward,
+                                        1.5 * (1.0 - d / radius))
 
-        # 4. VELOCITY — reward ball moving toward +Y, penalise ball moving toward -Y
-        forward_reward  =  max(ball_vel[1],  0.0) * 0.5
-        backward_penalty = min(ball_vel[1],  0.0) * 0.2   # negative if ball going backward
+        # ── 5. DEFENSIVE PLAY — goalie/def guys near ball in own half ────────
+        defense_reward = 0.0
+        if ball_world_y < 0:
+            radius = KICK_RADIUS * 1.5
+            for gid in self._yellow_def_bids:
+                dx = ball_xy[0] - self.data.body(gid).xpos[0]
+                dy = ball_xy[1] - self.data.body(gid).xpos[1]
+                d = math.sqrt(dx * dx + dy * dy)
+                if d < radius:
+                    defense_reward = max(defense_reward,
+                                         1.5 * (1.0 - d / radius))
 
-        # 5. PENALTIES
-        time_penalty = -0.5
-        ctrl_cost    = self.control_cost(protagonist_action)  # already positive, subtracted below
+        # ── 6. SHOOTING — reward ball velocity toward opponent goal ──────────
+        # Scales up as ball approaches opponent goal.
+        shooting_reward = 0.0
+        if ball_world_y > 0 and ball_vel[1] > 0:
+            proximity = ball_world_y / TABLE_MAX_Y_DIM  # 0..1
+            shooting_reward = min(ball_vel[1] * 0.1 * (0.5 + proximity), 3.0)
 
-        reward = (victory + loss
-                  + contact_reward
-                  + position_reward + defensive_penalty
-                  + forward_reward  + backward_penalty
+        # ── 7. DANGER — penalise ball moving toward own goal in own half ─────
+        danger_penalty = 0.0
+        if ball_world_y < -TABLE_MAX_Y_DIM * 0.4 and ball_vel[1] < 0:
+            depth = abs(ball_world_y) / TABLE_MAX_Y_DIM  # 0.4..1.0
+            danger_penalty = ball_vel[1] * 0.15 * depth   # negative number
+
+        # ── 8. BALL ACTIVITY — reward motion (anti-stall) ────────────────────
+        activity_reward = min(ball_speed * 0.03, 0.5)
+
+        # ── 9. PENALTIES ─────────────────────────────────────────────────────
+        time_penalty = -0.2
+        ctrl_cost = self.control_cost(protagonist_action)
+
+        reward = (position_reward
+                  + engagement_reward
+                  + attack_reward + defense_reward
+                  + shooting_reward + danger_penalty
+                  + activity_reward
                   + time_penalty
                   - ctrl_cost)
         return reward

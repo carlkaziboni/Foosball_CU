@@ -125,9 +125,10 @@ def patch_model(model):
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         for g in range(1, 6):
-            for suffix in [f"{prefix}_guy{g}", f"{prefix}_guy{g}_visual"]:
-                gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, suffix)
-                if gid >= 0:
+            # Only enable collision on capsule geoms, NOT visual meshes
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
+                                    f"{prefix}_guy{g}")
+            if gid >= 0:
                     model.geom_contype[gid] = 1
                     model.geom_conaffinity[gid] = 1
 
@@ -187,6 +188,11 @@ def resolve_ids(model):
             model, mujoco.mjtObj.mjOBJ_JOINT, f"y_{rod['name']}_linear"
         )
         rod["slide_qpos_adr"] = model.jnt_qposadr[slide_jnt]
+
+        rot_jnt = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_JOINT, f"y_{rod['name']}_rotation"
+        )
+        rod["rot_qpos_adr"] = model.jnt_qposadr[rot_jnt]
 
     return ids
 
@@ -270,16 +276,28 @@ def compute_controls(data, ids):
     return ctrl, phases
 
 
+# Max rod rotation (from vertical) at which a kick can fire.
+# Beyond ~70° the foosman is too high to reach the ball.
+MAX_KICK_ANGLE = math.radians(70)
+
+
 def detect_and_kick(data, ids, phases, verbose=False):
     """
-    Kinematic hit: if a rod is striking and its nearest foosman is
-    within HIT_RADIUS_XY of the ball, apply a velocity impulse.
+    Kinematic hit: if a rod is striking, its foosman is close to the ball,
+    AND the rod rotation puts the foosman low enough to contact the ball,
+    apply a velocity impulse.
     """
     ball_x, ball_y = get_ball_xy(data, ids)
 
     for rod in RODS:
         if phases.get(rod["name"]) != "strike":
             continue
+
+        # Check rod rotation — only kick when foosman is in hitting range
+        rot_angle = abs(data.qpos[rod["rot_qpos_adr"]])
+        if rot_angle > MAX_KICK_ANGLE:
+            continue
+
         _, best_dx = nearest_guy_x(data, rod, ball_x)
         rod_dy = abs(ball_y - rod["rod_y"])
         dist_xy = math.sqrt(best_dx ** 2 + rod_dy ** 2)
@@ -287,6 +305,7 @@ def detect_and_kick(data, ids, phases, verbose=False):
             print(f"    [{rod['name']}] ball=({ball_x:.1f},{ball_y:.1f}) "
                   f"rod_y={rod['rod_y']} guy_dx={best_dx:.1f} "
                   f"rod_dy={rod_dy:.1f} dist={dist_xy:.1f} "
+                  f"rot={math.degrees(rot_angle):.0f}° "
                   f"{'HIT' if dist_xy < HIT_RADIUS_XY else 'miss'}")
         if dist_xy < HIT_RADIUS_XY:
             deflect = np.random.uniform(-DEFLECT_X, DEFLECT_X)
@@ -312,12 +331,31 @@ def reset_sim(model, data, ids):
 
 
 def clamp_ball_to_field(data, ids):
-    """Bounce the ball off side walls (table mesh collision is off)."""
-    WALL_X = 24.25  # side walls at approximately +/-24.25
+    """Bounce ball off side walls and end walls (outside goal opening)."""
+    WALL_X = 24.25
+    GOAL_Y = 40.5
+    GOAL_HALF_W = 4.0
+    WALL_RESTITUTION = 0.8
+
     bx = data.qpos[ids["ball_qpos_x"]]
+    by_world = data.body(ids["ball_body"]).xpos[1]
+
+    # Side-wall bounce
     if abs(bx) > WALL_X:
         data.qpos[ids["ball_qpos_x"]] = np.clip(bx, -WALL_X, WALL_X)
         data.qvel[ids["ball_dof_x"]] *= -0.5  # bounce with energy loss
+
+    # End-wall bounce (only outside the goal opening)
+    if abs(by_world) >= GOAL_Y and abs(bx) >= GOAL_HALF_W:
+        vy = data.qvel[ids["ball_dof_y"]]
+        if by_world > GOAL_Y and vy > 0:
+            overshoot = by_world - GOAL_Y
+            data.qpos[ids["ball_qpos_y"]] -= overshoot
+            data.qvel[ids["ball_dof_y"]] = -abs(vy) * WALL_RESTITUTION
+        elif by_world < -GOAL_Y and vy < 0:
+            overshoot = -GOAL_Y - by_world
+            data.qpos[ids["ball_qpos_y"]] += overshoot
+            data.qvel[ids["ball_dof_y"]] = abs(vy) * WALL_RESTITUTION
 
 
 def nudge_stale_ball(data, ids, stale_counter):
@@ -335,7 +373,11 @@ def nudge_stale_ball(data, ids, stale_counter):
 
 
 def check_goal(data, ids):
-    _, by = get_ball_xy(data, ids)
+    """Only count a goal when the ball passes through the goal opening."""
+    bx, by = get_ball_xy(data, ids)
+    GOAL_HALF_W = 4.0
+    if abs(bx) >= GOAL_HALF_W:
+        return None  # outside goal opening — wall bounce handles it
     if by > 40.5:
         return "scored"
     elif by < -40.5:

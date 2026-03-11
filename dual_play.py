@@ -34,15 +34,17 @@ XML_PATH = os.path.join(SCRIPT_DIR, "foosball_sim", "v2", "foosball_sim.xml")
 # --- Simulation settings ---------------------------------------------------
 MAX_SECONDS = 120          # Max wall-clock time before reset (live viewer)
 REALTIME    = True         # Sync to wall clock in viewer
-KICK_SPEED  = 200.0        # Ball Y-velocity applied on a "hit"
-DEFLECT_X   = 15.0         # Random X-deflection on hits
+KICK_SPEED  = 120.0        # Ball Y-velocity applied on a "hit"
+DEFLECT_X   = 8.0          # Random X-deflection on hits
 
 # --- Control parameters ----------------------------------------------------
-STRIKE_ZONE_Y  = 18.0     # |dy| < this -> trigger full strike
-TRACK_ZONE_Y   = 35.0     # |dy| < this -> track ball laterally & wind up
-HIT_RADIUS_XY  = 15.0     # Proximity (X-Y plane) to count as a "hit"
-WALL_X         = 33.0     # Side walls
-GOAL_Y         = 65.0     # Goal line
+STRIKE_ZONE_Y  = 12.0     # |dy| < this -> trigger full strike
+TRACK_ZONE_Y   = 20.0     # |dy| < this -> track ball laterally & wind up
+HIT_RADIUS_XY  = 8.0      # Proximity (X-Y plane) to count as a "hit"
+WALL_X         = 24.25    # Side walls
+GOAL_Y         = 40.5     # Goal line
+GOAL_HALF_W    = 4.0      # Half-width of goal opening in X
+WALL_RESTITUTION = 0.8    # End-wall bounce coefficient
 
 # --- Rod definitions -------------------------------------------------------
 # Each team has 4 rods. "kick_dir" is +1 (yellow kicks toward +Y) or
@@ -53,10 +55,10 @@ YELLOW_RODS = [
         "name": "goal",  "team": "yellow",
         "body": "y_goal_rod",
         "linear_ctrl": 0,   "rot_ctrl": 1,
-        "ctrl_range_linear": (-10.0, 10.0),
+        "ctrl_range_linear": (-8.25, 8.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["y_goal_guy1", "y_goal_guy2", "y_goal_guy3"],
-        "rod_y": -52.5,
+        "guys": ["y_goal_guy1"],
+        "rod_y": -33.25,
         "kick_dir": 1.0,
         "joint_prefix": "y_goal",
     },
@@ -64,10 +66,10 @@ YELLOW_RODS = [
         "name": "def",  "team": "yellow",
         "body": "y_def_rod",
         "linear_ctrl": 2,   "rot_ctrl": 3,
-        "ctrl_range_linear": (-20.0, 20.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["y_def_guy1", "y_def_guy2"],
-        "rod_y": -37.5,
+        "guys": ["y_def_guy1", "y_def_guy2", "y_def_guy3"],
+        "rod_y": -23.75,
         "kick_dir": 1.0,
         "joint_prefix": "y_def",
     },
@@ -75,11 +77,11 @@ YELLOW_RODS = [
         "name": "mid",  "team": "yellow",
         "body": "y_mid_rod",
         "linear_ctrl": 4,   "rot_ctrl": 5,
-        "ctrl_range_linear": (-7.0, 7.0),
+        "ctrl_range_linear": (-8.95, 8.95),
         "ctrl_range_rot":    (-2.5, 2.5),
         "guys": ["y_mid_guy1", "y_mid_guy2", "y_mid_guy3",
-                 "y_mid_guy4", "y_mid_guy5"],
-        "rod_y": -7.5,
+                 "y_mid_guy4"],
+        "rod_y": -4.75,
         "kick_dir": 1.0,
         "joint_prefix": "y_mid",
     },
@@ -87,10 +89,10 @@ YELLOW_RODS = [
         "name": "attack",  "team": "yellow",
         "body": "y_attack_rod",
         "linear_ctrl": 6,   "rot_ctrl": 7,
-        "ctrl_range_linear": (-12.0, 12.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
         "guys": ["y_attack_guy1", "y_attack_guy2", "y_attack_guy3"],
-        "rod_y": 22.5,
+        "rod_y": 14.25,
         "kick_dir": 1.0,
         "joint_prefix": "y_attack",
     },
@@ -101,10 +103,10 @@ BLUE_RODS = [
         "name": "goal",  "team": "blue",
         "body": "b_goal_rod",
         "linear_ctrl": 8,   "rot_ctrl": 9,
-        "ctrl_range_linear": (-10.0, 10.0),
+        "ctrl_range_linear": (-8.25, 8.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["b_goal_guy1", "b_goal_guy2", "b_goal_guy3"],
-        "rod_y": 52.5,
+        "guys": ["b_goal_guy1"],
+        "rod_y": 33.25,
         "kick_dir": -1.0,
         "joint_prefix": "b_goal",
     },
@@ -112,10 +114,10 @@ BLUE_RODS = [
         "name": "def",  "team": "blue",
         "body": "b_def_rod",
         "linear_ctrl": 10,  "rot_ctrl": 11,
-        "ctrl_range_linear": (-20.0, 20.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
-        "guys": ["b_def_guy1", "b_def_guy2"],
-        "rod_y": 37.5,
+        "guys": ["b_def_guy1", "b_def_guy2", "b_def_guy3"],
+        "rod_y": 23.75,
         "kick_dir": -1.0,
         "joint_prefix": "b_def",
     },
@@ -123,11 +125,11 @@ BLUE_RODS = [
         "name": "mid",  "team": "blue",
         "body": "b_mid_rod",
         "linear_ctrl": 12,  "rot_ctrl": 13,
-        "ctrl_range_linear": (-7.0, 7.0),
+        "ctrl_range_linear": (-8.95, 8.95),
         "ctrl_range_rot":    (-2.5, 2.5),
         "guys": ["b_mid_guy1", "b_mid_guy2", "b_mid_guy3",
-                 "b_mid_guy4", "b_mid_guy5"],
-        "rod_y": 7.5,
+                 "b_mid_guy4"],
+        "rod_y": 4.75,
         "kick_dir": -1.0,
         "joint_prefix": "b_mid",
     },
@@ -135,10 +137,10 @@ BLUE_RODS = [
         "name": "attack",  "team": "blue",
         "body": "b_attack_rod",
         "linear_ctrl": 14,  "rot_ctrl": 15,
-        "ctrl_range_linear": (-12.0, 12.0),
+        "ctrl_range_linear": (-9.25, 9.25),
         "ctrl_range_rot":    (-2.5, 2.5),
         "guys": ["b_attack_guy1", "b_attack_guy2", "b_attack_guy3"],
-        "rod_y": -22.5,
+        "rod_y": -14.25,
         "kick_dir": -1.0,
         "joint_prefix": "b_attack",
     },
@@ -179,24 +181,25 @@ def patch_model(model):
     for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
                     "b_goal", "b_def", "b_mid", "b_attack"]:
         for g in range(1, 6):
-            for suffix in [f"{prefix}_guy{g}", f"{prefix}_guy{g}_visual"]:
-                gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, suffix)
-                if gid >= 0:
-                    model.geom_contype[gid] = 1
-                    model.geom_conaffinity[gid] = 1
+            # Only enable collision on capsule geoms, NOT visual meshes
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,
+                                    f"{prefix}_guy{g}")
+            if gid >= 0:
+                model.geom_contype[gid] = 1
+                model.geom_conaffinity[gid] = 1
 
     # 2. Ball joint limits & friction
-    #    Side-wall rubber geoms sit at Z=7.75, ball at Z=1.705 — can't collide.
-    #    Hard joint limits on ball_x keep it inside the field (±32).
+    #    Hard joint limits on ball_x keep it inside the field (±24.25).
+    #    ball_y limits are [-45, 50] to allow slight goal overshoot.
     bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
     if bx_jid >= 0:
         model.jnt_limited[bx_jid] = 1
-        model.jnt_range[bx_jid] = [-32.0, 32.0]
+        model.jnt_range[bx_jid] = [-24.25, 24.25]
         model.dof_frictionloss[model.jnt_dofadr[bx_jid]] = 0.2
     by_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_y")
     if by_jid >= 0:
         model.jnt_limited[by_jid] = 1
-        model.jnt_range[by_jid] = [-70.0, 78.0]
+        model.jnt_range[by_jid] = [-45.0, 50.0]
         model.dof_frictionloss[model.jnt_dofadr[by_jid]] = 0.2
 
     # 3. Rotation joints: moderate damping + armature + tamed actuator gains
@@ -244,6 +247,11 @@ def resolve_ids(model):
             f"{rod['joint_prefix']}_linear")
         rod["slide_qpos_adr"] = model.jnt_qposadr[slide_jnt]
 
+        rot_jnt = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_JOINT,
+            f"{rod['joint_prefix']}_rotation")
+        rod["rot_qpos_adr"] = model.jnt_qposadr[rot_jnt]
+
     return ids
 
 
@@ -268,10 +276,26 @@ def apply_kick(data, ids, direction_y, deflect_x=0.0):
 
 
 def clamp_ball_to_field(data, ids):
+    """Bounce ball off side walls and end walls (outside goal opening)."""
     bx = data.qpos[ids["ball_qpos_x"]]
+    by_world = data.body(ids["ball_body"]).xpos[1]
+
+    # Side-wall bounce
     if abs(bx) > WALL_X:
         data.qpos[ids["ball_qpos_x"]] = np.clip(bx, -WALL_X, WALL_X)
         data.qvel[ids["ball_dof_x"]] *= -0.5
+
+    # End-wall bounce (only outside the goal opening)
+    if abs(by_world) >= GOAL_Y and abs(bx) >= GOAL_HALF_W:
+        vy = data.qvel[ids["ball_dof_y"]]
+        if by_world > GOAL_Y and vy > 0:
+            overshoot = by_world - GOAL_Y
+            data.qpos[ids["ball_qpos_y"]] -= overshoot
+            data.qvel[ids["ball_dof_y"]] = -abs(vy) * WALL_RESTITUTION
+        elif by_world < -GOAL_Y and vy < 0:
+            overshoot = -GOAL_Y - by_world
+            data.qpos[ids["ball_qpos_y"]] += overshoot
+            data.qvel[ids["ball_dof_y"]] = abs(vy) * WALL_RESTITUTION
 
 
 def nudge_stale_ball(data, ids, stale_counter):
@@ -282,8 +306,8 @@ def nudge_stale_ball(data, ids, stale_counter):
         stale_counter = 0
     if stale_counter > 200:
         # Push toward a random direction
-        data.qvel[ids["ball_dof_y"]] += np.random.choice([-1, 1]) * np.random.uniform(30, 70)
-        data.qvel[ids["ball_dof_x"]] += np.random.uniform(-15, 15)
+        data.qvel[ids["ball_dof_y"]] += np.random.choice([-1, 1]) * np.random.uniform(20, 50)
+        data.qvel[ids["ball_dof_x"]] += np.random.uniform(-10, 10)
         stale_counter = 0
     return stale_counter
 
@@ -349,17 +373,29 @@ def compute_controls(data, ids, rods):
     return ctrl_map, phases
 
 
+# Maximum rod rotation (from vertical) at which a kick can fire.
+# At 70° the capsule bottom is ~Z=2.9 — borderline ball contact.
+# Beyond this the foosman is too high to reach the ball.
+MAX_KICK_ANGLE = math.radians(70)
+
+
 def detect_and_kick(data, ids, rods, phases, verbose=False):
     """
-    Kinematic hit: if a rod is striking and its nearest foosman is
-    within HIT_RADIUS_XY of the ball, apply a velocity impulse in
-    that team's kick direction.
+    Kinematic hit: if a rod is striking, its foosman is close to the ball,
+    AND the rod rotation puts the foosman low enough to contact the ball,
+    apply a velocity impulse in that team's kick direction.
     """
     ball_x, ball_y = get_ball_xy(data, ids)
 
     for rod in rods:
         if phases.get(rod["name"]) != "strike":
             continue
+
+        # Check rod rotation — only kick when foosman is in hitting range
+        rot_angle = abs(data.qpos[rod["rot_qpos_adr"]])
+        if rot_angle > MAX_KICK_ANGLE:
+            continue
+
         _, best_dx = nearest_guy_x(data, rod, ball_x)
         rod_dy = abs(ball_y - rod["rod_y"])
         dist_xy = math.sqrt(best_dx ** 2 + rod_dy ** 2)
@@ -367,7 +403,7 @@ def detect_and_kick(data, ids, rods, phases, verbose=False):
             team = rod["team"]
             print(f"    [{team} {rod['name']}] ball=({ball_x:.1f},{ball_y:.1f}) "
                   f"rod_y={rod['rod_y']} guy_dx={best_dx:.1f} "
-                  f"dist={dist_xy:.1f} "
+                  f"dist={dist_xy:.1f} rot={math.degrees(rot_angle):.0f}° "
                   f"{'HIT' if dist_xy < HIT_RADIUS_XY else 'miss'}")
         if dist_xy < HIT_RADIUS_XY:
             deflect = np.random.uniform(-DEFLECT_X, DEFLECT_X)
@@ -391,8 +427,11 @@ def reset_sim(model, data, ids):
 
 
 def check_goal(data, ids):
-    """Return 'yellow' if yellow scores (ball past +Y), 'blue' if blue scores."""
-    _, by = get_ball_xy(data, ids)
+    """Return 'yellow' if yellow scores (ball past +Y in goal opening),
+    'blue' if blue scores (ball past -Y in goal opening)."""
+    bx, by = get_ball_xy(data, ids)
+    if abs(bx) >= GOAL_HALF_W:
+        return None  # outside goal opening — wall bounce handles it
     if by > GOAL_Y:
         return "yellow"
     elif by < -GOAL_Y:
@@ -420,7 +459,7 @@ def run_live_viewer(model, data, ids, max_goals):
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.azimuth = 90
         viewer.cam.elevation = -45
-        viewer.cam.distance = 160
+        viewer.cam.distance = 100
         viewer.cam.lookat[:] = [0, 0, 5]
 
         wall_start = time.time()
@@ -448,7 +487,7 @@ def run_live_viewer(model, data, ids, max_goals):
                     teams = [(BLUE_RODS, b_phases), (YELLOW_RODS, y_phases)]
                 for rods, phases in teams:
                     if detect_and_kick(data, ids, rods, phases):
-                        kick_cooldown = 100
+                        kick_cooldown = 30
                         break
             else:
                 kick_cooldown -= 1
@@ -535,7 +574,7 @@ def run_mp4(model, data, ids, output_path, max_goals):
                 teams = [(BLUE_RODS, b_phases), (YELLOW_RODS, y_phases)]
             for rods, phases in teams:
                 if detect_and_kick(data, ids, rods, phases):
-                    kick_cooldown = 100
+                    kick_cooldown = 30
                     break
         else:
             kick_cooldown -= 1

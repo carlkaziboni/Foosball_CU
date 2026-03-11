@@ -9,9 +9,7 @@
     </default>
 
     <asset>
-      <mesh name="table" file="asset/foosball_table/foosball_table.obj"/>
-      <mesh name="table_backup" file="asset/foosball_table/foosball_table.obj"/>
-      <mesh name="guy" file="asset/foosman/mesh_down_foosman.obj" scale='0.1 0.1 0.1'/>
+      <mesh name="guy" file="asset/foosman/mesh_down_foosman.obj" scale='0.07 0.07 0.07'/>
       <mesh name="handle" file="asset/handle/foosball_handle.obj" scale='0.1 0.1 0.1'/>
     </asset>
 
@@ -49,10 +47,6 @@
     -->
 
     <worldbody>
-      <!-- TABLE MESH (visual only) -->
-      <body name="table" euler="90 90 0" pos="0 0 0">
-        <geom type="mesh" name="table" mesh="table" rgba='1.0 1.0 1.0 1' group="2"/>
-      </body>
 
     <!-- ═══════════════════════════════════════════════════════════════════
          YELLOW TEAM  (Y-negative end)
@@ -64,9 +58,9 @@
         <joint name="y_goal_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="y_goal_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.8" diaginertia="50 50 0.03"/>
-        <geom name="y_goal_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <geom name="y_goal_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
         <!-- Handle -->
-        <body name="y_goal_rod_handle" pos="0 0 28" euler="180 0 0">
+        <body name="y_goal_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
         </body>
         <!-- Rubber bumpers (goalie gap = 32cm → bumpers at ±16) -->
@@ -79,10 +73,10 @@
           <geom name="y_goal_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
         </body>
         <!-- 1 Yellow Goalkeeper -->
-        <body name="y_goal_guy1" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="y_goal_guy1" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_goal_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_goal_guy1" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_goal_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -91,33 +85,26 @@
         <joint name="y_def_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="y_def_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
-        <geom name="y_def_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="y_def_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="y_def_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_def_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
         </body>
-        <body name="y_def_rod_r_rubber" pos="0 0 -17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_def_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="y_def_rod_l_rubber" pos="0 0 17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_def_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 3 Yellow Defenders (spacing 15cm: -15, 0, +15) -->
-        <body name="y_def_guy1" pos="3.0 -0.05 -15" euler="180 -90 0">
+
+<!-- 3 Yellow Defenders (spacing 15cm: -15, 0, +15) -->
+        <body name="y_def_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_def_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_def_guy1" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_def_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_def_guy2" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="y_def_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_def_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_def_guy2" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_def_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_def_guy3" pos="3.0 -0.05 15" euler="180 -90 0">
+        <body name="y_def_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_def_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_def_guy3" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_def_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -126,38 +113,31 @@
         <joint name="y_mid_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="y_mid_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.85" diaginertia="55 55 0.032"/>
-        <geom type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="y_mid_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_mid_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
         </body>
-        <body name="y_mid_rod_r_rubber" pos="0 0 -17.8" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_mid_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="y_mid_rod_l_rubber" pos="0 0 17.8" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_mid_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 4 Yellow Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
-        <body name="y_mid_guy1" pos="3.0 -0.05 -15.3" euler="180 -90 0">
+
+<!-- 4 Yellow Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
+        <body name="y_mid_guy1" pos="0.284 -0.05 -15.3" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy1" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_mid_guy2" pos="3.0 -0.05 -5.1" euler="180 -90 0">
+        <body name="y_mid_guy2" pos="0.284 -0.05 -5.1" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy2" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_mid_guy3" pos="3.0 -0.05 5.1" euler="180 -90 0">
+        <body name="y_mid_guy3" pos="0.284 -0.05 5.1" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy3" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_mid_guy4" pos="3.0 -0.05 15.3" euler="180 -90 0">
+        <body name="y_mid_guy4" pos="0.284 -0.05 15.3" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_mid_guy4_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_mid_guy4" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_mid_guy4" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -166,33 +146,26 @@
         <joint name="y_attack_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="y_attack_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
-        <geom name="y_attack_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="y_attack_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="y_attack_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_attack_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
         </body>
-        <body name="y_attack_rod_r_rubber" pos="0 0 -17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_attack_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="y_attack_rod_l_rubber" pos="0 0 17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="y_attack_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 3 Yellow Attackers (spacing 15cm: -15, 0, +15) -->
-        <body name="y_attack_guy1" pos="3.0 -0.05 -15" euler="180 -90 0">
+
+<!-- 3 Yellow Attackers (spacing 15cm: -15, 0, +15) -->
+        <body name="y_attack_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy1" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_attack_guy2" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="y_attack_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy2" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="y_attack_guy3" pos="3.0 -0.05 15" euler="180 -90 0">
+        <body name="y_attack_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="y_attack_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="y_attack_guy3" size="1.0 2.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="y_attack_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -206,8 +179,8 @@
         <joint name="b_goal_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="b_goal_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.8" diaginertia="50 50 0.03"/>
-        <geom name="b_goal_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="b_goal_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="b_goal_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_goal_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
         </body>
         <body name="b_goal_rod_r_rubber" pos="0 0 -16" euler="0 0 90">
@@ -219,10 +192,10 @@
           <geom name="b_goal_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
         </body>
         <!-- 1 Blue Goalkeeper -->
-        <body name="b_goal_guy1" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="b_goal_guy1" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_goal_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_goal_guy1" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_goal_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -231,33 +204,26 @@
         <joint name="b_def_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="b_def_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
-        <geom name="b_def_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="b_def_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="b_def_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_def_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
         </body>
-        <body name="b_def_rod_r_rubber" pos="0 0 -17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_def_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="b_def_rod_l_rubber" pos="0 0 17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_def_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 3 Blue Defenders (spacing 15cm: -15, 0, +15) -->
-        <body name="b_def_guy1" pos="3.0 -0.05 -15" euler="180 -90 0">
+
+<!-- 3 Blue Defenders (spacing 15cm: -15, 0, +15) -->
+        <body name="b_def_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_def_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_def_guy1" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_def_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_def_guy2" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="b_def_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_def_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_def_guy2" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_def_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_def_guy3" pos="3.0 -0.05 15" euler="180 -90 0">
+        <body name="b_def_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_def_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_def_guy3" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_def_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -266,38 +232,31 @@
         <joint name="b_mid_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="b_mid_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.85" diaginertia="55 55 0.032"/>
-        <geom name="b_mid_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="b_mid_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="b_mid_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_mid_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
         </body>
-        <body name="b_mid_rod_r_rubber" pos="0 0 -17.8" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_mid_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="b_mid_rod_l_rubber" pos="0 0 17.8" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_mid_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 4 Blue Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
-        <body name="b_mid_guy1" pos="3.0 -0.05 -15.3" euler="180 -90 0">
+
+<!-- 4 Blue Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
+        <body name="b_mid_guy1" pos="0.284 -0.05 -15.3" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_mid_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_mid_guy1" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_mid_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_mid_guy2" pos="3.0 -0.05 -5.1" euler="180 -90 0">
+        <body name="b_mid_guy2" pos="0.284 -0.05 -5.1" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_mid_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_mid_guy2" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_mid_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_mid_guy3" pos="3.0 -0.05 5.1" euler="180 -90 0">
+        <body name="b_mid_guy3" pos="0.284 -0.05 5.1" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_mid_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_mid_guy3" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_mid_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_mid_guy4" pos="3.0 -0.05 15.3" euler="180 -90 0">
+        <body name="b_mid_guy4" pos="0.284 -0.05 15.3" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_mid_guy4_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_mid_guy4" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_mid_guy4" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
@@ -306,38 +265,31 @@
         <joint name="b_attack_linear" type="slide" axis="0 0 1" range="-12 12"/>
         <joint name="b_attack_rotation" type="hinge" axis="0 0 1" range="-180.0 180.0"/>
         <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
-        <geom name="b_attack_rod" type="cylinder" size="0.5 30" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
-        <body name="b_attack_rod_handle" pos="0 0 28" euler="180 0 0">
+        <geom name="b_attack_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_attack_rod_handle" pos="0 0 38" euler="180 0 0">
           <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
         </body>
-        <body name="b_attack_rod_r_rubber" pos="0 0 -17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_attack_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <body name="b_attack_rod_l_rubber" pos="0 0 17.5" euler="0 0 90">
-          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
-          <geom name="b_attack_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
-        </body>
-        <!-- 3 Blue Attackers (spacing 15cm: -15, 0, +15) -->
-        <body name="b_attack_guy1" pos="3.0 -0.05 -15" euler="180 -90 0">
+
+<!-- 3 Blue Attackers (spacing 15cm: -15, 0, +15) -->
+        <body name="b_attack_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy1" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_attack_guy2" pos="3.0 -0.05 0" euler="180 -90 0">
+        <body name="b_attack_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy2" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
-        <body name="b_attack_guy3" pos="3.0 -0.05 15" euler="180 -90 0">
+        <body name="b_attack_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
           <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
           <geom type="mesh" name="b_attack_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
-          <geom type="capsule" name="b_attack_guy3" size="1.0 2.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+          <geom type="capsule" name="b_attack_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
         </body>
       </body>
 
-      <!-- MATCH BALL — diameter 2.5cm, ground clearance 0.3cm -->
-      <body name="ball" pos="0 -4 1.55">
+      <!-- MATCH BALL — diameter 2.5cm, rests on playing surface (Z=0) -->
+      <body name="ball" pos="0 -4 1.25">
         <joint name="ball_x" type="slide" axis="1 0 0" frictionloss="20"/>
         <joint name="ball_y" type="slide" axis="0 1 0" frictionloss="20"/>
         <geom name="ball" type="sphere" size="1.25" mass="0.1" rgba="0.8 0.3 0.5 1"
@@ -346,28 +298,8 @@
 
     </worldbody>
 
-    <!-- Exclude contact between rods/handles/rubbers and the table mesh -->
+    <!-- Exclude contact between side rubbers and rods -->
     <contact>
-      <exclude body1="y_goal_rod" body2="table"/>
-      <exclude body1="y_def_rod" body2="table"/>
-      <exclude body1="y_mid_rod" body2="table"/>
-      <exclude body1="y_attack_rod" body2="table"/>
-
-      <exclude body1="b_goal_rod" body2="table"/>
-      <exclude body1="b_def_rod" body2="table"/>
-      <exclude body1="b_mid_rod" body2="table"/>
-      <exclude body1="b_attack_rod" body2="table"/>
-
-      <exclude body1="y_goal_rod_handle" body2="table"/>
-      <exclude body1="y_def_rod_handle" body2="table"/>
-      <exclude body1="y_mid_rod_handle" body2="table"/>
-      <exclude body1="y_attack_rod_handle" body2="table"/>
-
-      <exclude body1="b_goal_rod_handle" body2="table"/>
-      <exclude body1="b_def_rod_handle" body2="table"/>
-      <exclude body1="b_mid_rod_handle" body2="table"/>
-      <exclude body1="b_attack_rod_handle" body2="table"/>
-
       <exclude body1="table_side_rubber_y_goal_r" body2="y_goal_rod"/>
       <exclude body1="table_side_rubber_y_goal_l" body2="y_goal_rod"/>
       <exclude body1="table_side_rubber_y_def_r" body2="y_def_rod"/>
