@@ -247,6 +247,22 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
                     else:
                         self._yellow_atk_bids.append(gid)
 
+        # Contact reward: ball geom + foosman geom sets (O(1) lookup per contact)
+        _gid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, n)
+        self._ball_geom_id = _gid("ball")
+        self._yellow_geom_set = set()
+        self._blue_geom_set   = set()
+        for prefix in ["y_goal", "y_def", "y_mid", "y_attack"]:
+            for g in range(1, 6):
+                gid = _gid(f"{prefix}_guy{g}")
+                if gid >= 0:
+                    self._yellow_geom_set.add(gid)
+        for prefix in ["b_goal", "b_def", "b_mid", "b_attack"]:
+            for g in range(1, 6):
+                gid = _gid(f"{prefix}_guy{g}")
+                if gid >= 0:
+                    self._blue_geom_set.add(gid)
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
@@ -469,7 +485,9 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
           6. Shooting — ball velocity toward opp goal
           7. Danger — ball flying toward own goal deep in own half
           8. Ball activity — reward motion
-          9. Time + ctrl penalties
+          9. Contact — own touch: +10..+30 (speed × position scaled)
+                      opp touch: -20..-40 (scaled by depth in own half)
+         10. Time + ctrl penalties
         """
         ball_pos, ball_vel = self._get_ball_obs()
         ball_speed = math.sqrt(ball_vel[0] ** 2 + ball_vel[1] ** 2)
@@ -538,7 +556,32 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
         # ── 8. BALL ACTIVITY — reward motion (anti-stall) ────────────────────
         activity_reward = min(ball_speed * 0.03, 0.5)
 
-        # ── 9. PENALTIES ─────────────────────────────────────────────────────
+        # ── 9. CONTACT — structured ball-touch reward ─────────────────────────
+        # Own touch:
+        #   base +20.0, scaled by ball speed (faster strike = better),
+        #   +10.0 bonus if ball is in opponent half AND moving toward their goal.
+        #   Range: +10..+30 (idle tap in own half → fast attacking strike).
+        # Opponent touch:
+        #   base -20.0, scaled by depth in own half (near our goal = -40).
+        #   Range: -20..-40.
+        contact_reward = 0.0
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            g1, g2 = c.geom1, c.geom2
+            if g1 == self._ball_geom_id or g2 == self._ball_geom_id:
+                other = g2 if g1 == self._ball_geom_id else g1
+                if other in self._yellow_geom_set:
+                    speed_scale  = min(ball_speed / 30.0, 1.0)           # 0..1
+                    attack_bonus = (10.0 if ball_world_y > 0 and ball_vel[1] > 0
+                                    else 0.0)
+                    contact_reward += 20.0 * (0.5 + 0.5 * speed_scale) + attack_bonus
+                    break   # one own-contact reward per step is enough
+                elif other in self._blue_geom_set:
+                    depth_scale  = max(0.0, -ball_world_y / TABLE_MAX_Y_DIM)  # 0..1
+                    contact_reward -= 20.0 * (1.0 + depth_scale)
+                    break   # one opp-contact penalty per step is enough
+
+        # ── 10. PENALTIES ────────────────────────────────────────────────────
         time_penalty = -0.2
         ctrl_cost = self.control_cost(protagonist_action)
 
@@ -547,6 +590,7 @@ class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
                   + attack_reward + defense_reward
                   + shooting_reward + danger_penalty
                   + activity_reward
+                  + contact_reward
                   + time_penalty
                   - ctrl_cost)
         return reward
