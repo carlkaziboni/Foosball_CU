@@ -1,0 +1,611 @@
+import math
+
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+import mujoco
+import os
+import glfw
+
+
+# ── v3 rotation limit ─────────────────────────────────────────────────────────
+# Foosmen are restricted to ±π/2 (±90°) rotation.  This prevents them from
+# going upside-down and forces kicking to happen in the normal upright stance,
+# matching the real-world foosball rule that rods cannot spin freely.
+ROT_LIMIT = math.pi / 2   # 90 degrees — hard joint limit enforced in _patch_model
+
+
+def _patch_model(model):
+    """
+    Fix v3 physics issues in-memory (no XML changes):
+      1. Selective collision: disable ground plane, table mesh, rod cylinders,
+         rod handles, and rod rubber bumpers.  KEEP ball, foosman figures, and
+         side-wall rubbers so the ball physically bounces off walls and gets
+         struck by foosmen.
+      2. Reduce ball joint friction from 20 → 0.5.
+      3. Stabilise rotation actuators: armature=1.0, kp=5000, kd=200.
+      4. [v3] Hard-limit rotation joints to ±π/2 — foosmen cannot go upside-down.
+    """
+    # 1. Disable ALL geom collision first, then re-enable the ones we need
+    for i in range(model.ngeom):
+        model.geom_contype[i] = 0
+        model.geom_conaffinity[i] = 0
+
+    # Re-enable ball
+    ball_geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "ball")
+    if ball_geom >= 0:
+        model.geom_contype[ball_geom] = 1
+        model.geom_conaffinity[ball_geom] = 1
+
+    # Re-enable side-wall rubber bumpers (keep ball in bounds)
+    for i in range(model.ngeom):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i)
+        if name and "table_side_rubber" in name:
+            model.geom_contype[i] = 1
+            model.geom_conaffinity[i] = 1
+
+    # Re-enable foosman capsule geoms ONLY (visual meshes stay disabled)
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        for g in range(1, 6):
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"{prefix}_guy{g}")
+            if gid >= 0:
+                model.geom_contype[gid] = 1
+                model.geom_conaffinity[gid] = 1
+
+    # 2. Ball joint limits & friction
+    bx_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_x")
+    if bx_jid >= 0:
+        model.jnt_limited[bx_jid] = 1
+        model.jnt_range[bx_jid] = [-24.25, 24.25]
+        model.dof_frictionloss[model.jnt_dofadr[bx_jid]] = 0.2
+    by_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "ball_y")
+    if by_jid >= 0:
+        model.jnt_limited[by_jid] = 1
+        model.jnt_range[by_jid] = [-45.0, 50.0]
+        model.dof_frictionloss[model.jnt_dofadr[by_jid]] = 0.2
+
+    # 3. Rotation joints: moderate damping, armature for stability.
+    #    [v3] Hard-limit to ±ROT_LIMIT (π/2) so foosmen stay right-way-up.
+    #    Actuator ctrlrange is also clamped to ±ROT_LIMIT so the agent cannot
+    #    target positions beyond the joint limit.
+    for prefix in ["y_goal", "y_def", "y_mid", "y_attack",
+                    "b_goal", "b_def", "b_mid", "b_attack"]:
+        jnt_name = f"{prefix}_rotation"
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_name)
+        if jid >= 0:
+            dof = model.jnt_dofadr[jid]
+            model.dof_damping[dof] = 50.0
+            model.dof_armature[dof] = 1.0
+            model.jnt_limited[jid] = 1
+            model.jnt_range[jid] = [-ROT_LIMIT, ROT_LIMIT]   # ← v3: ±π/2
+
+        # Critically-damped PD: kp=5000, kd=200; ctrlrange clamped to ±ROT_LIMIT
+        act_name = f"{prefix}_rotation"
+        aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+        if aid >= 0:
+            model.actuator_gainprm[aid, 0] = 5000.0        # kp
+            model.actuator_biasprm[aid, 0] = 0.0
+            model.actuator_biasprm[aid, 1] = -5000.0       # -kp
+            model.actuator_biasprm[aid, 2] = -200.0        # -kd
+            model.actuator_ctrlrange[aid, 0] = -ROT_LIMIT  # ← v3: clamp target
+            model.actuator_ctrlrange[aid, 1] =  ROT_LIMIT
+
+
+from ai_agents.v3.gym.mujoco_table_render_mixin import MujocoTableRenderMixin
+
+DIRECTION_CHANGE = 1
+TABLE_MAX_Y_DIM = 40.5
+BALL_STOPPED_COUNT_THRESHOLD = 300
+MAX_EPISODE_STEPS = 1500              # actual env.step() calls, NOT simulation time
+
+RODS = ["_goal_", "_def_", "_mid_", "_attack_"]
+
+# ── Virtual-kick parameters ────────────────────────────────────────────────────
+KICK_RADIUS   = 6.0             # X-Y proximity to trigger a kick (foosman spacing ~10-15)
+KICK_SPEED    = 80.0            # peak impulse magnitude — scaled for 81-unit field
+KICK_MIN_ROT  = 0.3             # minimum |rotation| (rad) — below this the rod is idle
+KICK_MAX_ROT  = math.pi / 3    # maximum |rotation| (rad, ≈60°) — above this the foot is
+                                # too high to reach the ball (foosman nearly horizontal)
+KICK_COOLDOWN = 10              # steps between consecutive kicks
+
+# ── Goal / wall parameters ───────────────────────────────────────────────────────────────
+GOAL_HALF_WIDTH  = 4.0    # half-width of goal opening in X (±4 = 8 cm)
+WALL_Y           = 40.5   # world-Y position of each end wall
+WALL_X           = 24.25  # world-X position of each side wall
+WALL_RESTITUTION = 0.95   # coefficient of restitution for ALL wall bounces
+
+class FoosballEnv( MujocoTableRenderMixin, gym.Env, ):
+    metadata = {'render.modes': ['human', 'rgb_array']}
+
+    def __init__(self, antagonist_model=None, play_until_goal=False, verbose_mode=False):
+        super(FoosballEnv, self).__init__()
+
+        # Build path to XML file relative to this file's location
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.join(current_file_dir, '..', '..', '..')
+        xml_file = os.path.join(project_root, 'foosball_sim', 'v3', 'foosball_sim.xml')
+        xml_file = os.path.normpath(xml_file)  # Clean up the path
+
+        self.model = mujoco.MjModel.from_xml_path(xml_file)
+        _patch_model(self.model)
+        self.data = mujoco.MjData(self.model)
+
+        self.simulation_time = 0
+
+        self.num_rods_per_player = 4
+        self.num_players = 2
+        self.num_rods = self.num_rods_per_player * self.num_players  # Total rods
+
+        self.protagonist_action_size = self.num_rods_per_player * 2  # 8 actions for protagonist
+        self.antagonist_action_size = self.num_rods_per_player * 2   # 8 actions for antagonist
+
+        action_high = np.ones(self.protagonist_action_size)
+        # [v3] Rotation capped at ±ROT_LIMIT (π/2 ≈ 1.5708)
+        self.rotation_action_space = spaces.Box(
+            low=-ROT_LIMIT * action_high, high=ROT_LIMIT * action_high, dtype=np.float32
+        )
+
+        self.goal_linear_action_space = spaces.Box(
+            low=-8.25 * action_high, high=8.25 * action_high, dtype=np.float32
+        )
+        self.def_linear_action_space = spaces.Box(
+            low=-9.25 * action_high, high=9.25 * action_high, dtype=np.float32
+        )
+        self.mid_linear_action_space = spaces.Box(
+            low=-8.95 * action_high, high=8.95 * action_high, dtype=np.float32
+        )
+        self.attack_linear_action_space = spaces.Box(
+            low=-9.25 * action_high, high=9.25 * action_high, dtype=np.float32
+        )
+
+        self.action_space = spaces.Box(
+            low=-10 * action_high, high=10 * action_high, dtype=np.float32
+        )
+
+        obs_dim = 38
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
+        )
+
+        self.viewer = None
+
+        self._healthy_reward = 1.0
+        self._ctrl_cost_weight = 0.005
+        self._terminate_when_unhealthy = True
+        self._healthy_z_range = (-50, 50)
+        self.max_no_progress_steps = 500
+
+        self.prev_ball_y = None
+        self.no_progress_steps = 0
+        self.ball_stopped_count = 0
+        self._kick_cooldown = 0          # virtual-kick cooldown counter
+
+        self.antagonist_model = antagonist_model
+        self.play_until_goal = play_until_goal
+        self.verbose_mode = verbose_mode
+
+        # ── Cache ALL MuJoCo IDs once (avoids ~100+ mj_name2id per step) ──────
+        self._cache_ids()
+
+    def set_antagonist_model(self, antagonist_model):
+        self.antagonist_model = antagonist_model
+
+    def _cache_ids(self):
+        """Pre-resolve every MuJoCo name→id mapping used in step/reward/obs."""
+        _jid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, n)
+        _bid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
+
+        # Ball joints
+        bx = _jid('ball_x');  by = _jid('ball_y')
+        self._bx_qpos = self.model.jnt_qposadr[bx]
+        self._by_qpos = self.model.jnt_qposadr[by]
+        self._bx_dof  = self.model.jnt_dofadr[bx]
+        self._by_dof  = self.model.jnt_dofadr[by]
+        self._ball_bid = _bid('ball')
+
+        # Rod joints: slide + rotation for both players (used by _get_obs)
+        self._rod_slide_qpos = []
+        self._rod_slide_dof  = []
+        self._rod_rot_qpos   = []
+        self._rod_rot_dof    = []
+        for player in ['y', 'b']:
+            for rod in RODS:
+                sj = _jid(f"{player}{rod}linear")
+                rj = _jid(f"{player}{rod}rotation")
+                self._rod_slide_qpos.append(self.model.jnt_qposadr[sj])
+                self._rod_slide_dof.append(self.model.jnt_dofadr[sj])
+                self._rod_rot_qpos.append(self.model.jnt_qposadr[rj])
+                self._rod_rot_dof.append(self.model.jnt_dofadr[rj])
+
+        # Kick/reward: rotation joint qpos addrs per rod, guy body ids
+        # Organised as list of (kick_dir, rot_qpos_adr, [guy_body_ids])
+        self._kick_rods = []
+        for player in ['y', 'b']:
+            kick_dir = 1.0 if player == 'y' else -1.0
+            for rod in RODS:
+                rj = _jid(f"{player}{rod}rotation")
+                rot_qpos = self.model.jnt_qposadr[rj]
+                guys = []
+                for g in range(1, 6):
+                    gid = _bid(f"{player}{rod}guy{g}")
+                    if gid >= 0:
+                        guys.append(gid)
+                self._kick_rods.append((kick_dir, rot_qpos, guys))
+
+        # Protagonist (yellow) guy body ids — all, plus split by role
+        self._yellow_guy_bids = []
+        self._yellow_def_bids = []   # goalie + defense
+        self._yellow_atk_bids = []   # midfield + attack
+        for rod in RODS:
+            for g in range(1, 6):
+                gid = _bid(f"y{rod}guy{g}")
+                if gid >= 0:
+                    self._yellow_guy_bids.append(gid)
+                    if rod in ("_goal_", "_def_"):
+                        self._yellow_def_bids.append(gid)
+                    else:
+                        self._yellow_atk_bids.append(gid)
+
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
+        mujoco.mj_resetData(self.model, self.data)
+
+        # Ball body pos is (0, -4, 1.55), so qpos_y=4 → world Y≈0 (field centre).
+        xy_random = np.random.normal(
+            loc=[0.0, 4.0],
+            scale=[0.5, 0.5]
+        )
+
+        self.data.qpos[self._bx_qpos] = xy_random[0]
+        self.data.qpos[self._by_qpos] = xy_random[1]
+
+        self.simulation_time = 0
+        self._step_count = 0
+        self.prev_ball_y = self.data.qpos[self._by_qpos]
+        self.no_progress_steps = 0
+        self.ball_stopped_count = 0
+        self._kick_cooldown = 0
+
+        return self._get_obs(), {}
+
+    def step(self, protagonist_action):
+        protagonist_action = np.clip(protagonist_action, self.action_space.low, self.action_space.high)
+
+        antagonist_observation = self._get_antagonist_obs()
+
+        if self.antagonist_model is not None:
+            antagonist_result = self.antagonist_model.predict(antagonist_observation)
+            # SB3 SAC.predict() returns (action, state) tuple — unwrap it
+            antagonist_action = antagonist_result[0] if isinstance(antagonist_result, tuple) else antagonist_result
+            antagonist_action = np.clip(antagonist_action, -10.0, 10.0)
+            antagonist_action = self._adjust_antagonist_action(antagonist_action)
+        else:
+            antagonist_action = np.zeros(self.antagonist_action_size)
+
+        self.data.ctrl[:self.protagonist_action_size] = protagonist_action
+        self.data.ctrl[self.protagonist_action_size:self.protagonist_action_size + self.antagonist_action_size] = antagonist_action
+
+        mujoco.mj_step(self.model, self.data)
+        self._apply_virtual_kicks()   # inject ball impulse if foosman near + rotated
+        self._apply_wall_bounces()    # bounce off end walls (except goal opening)
+        self.simulation_time += self.model.opt.timestep
+        self._step_count += 1
+
+        obs = self._get_obs()
+
+        reward = self.compute_reward(protagonist_action)
+        terminated = self.terminated
+
+        info = {}
+
+        return obs, reward, terminated, False, info
+
+    def _get_ball_obs(self):
+        # Uses cached addresses — zero mj_name2id calls.
+        ball_pos = [
+            self.data.qpos[self._bx_qpos],
+            self.data.qpos[self._by_qpos],
+            0.0
+        ]
+        ball_vel = [
+            self.data.qvel[self._bx_dof],
+            self.data.qvel[self._by_dof],
+            0.0
+        ]
+        return ball_pos, ball_vel
+
+    def _get_antagonist_obs(self):
+        """Return a perspective-flipped observation for the antagonist (blue team).
+
+        From blue's point of view:
+          - Ball Y is negated (their goal is at -Y, so +Y means moving away from them).
+          - Ball Y velocity is negated for the same reason.
+          - The rod blocks are swapped so blue's own rods appear first in the vector,
+            matching how yellow's rods are ordered for the protagonist.
+
+        Obs layout (38-dim):
+          [0:3]   ball_pos  (x, y, 0)
+          [3:6]   ball_vel  (vx, vy, 0)
+          [6:14]  rod_slide_positions  (team0 × 4, team1 × 4)
+          [14:22] rod_slide_velocities
+          [22:30] rod_rotate_positions
+          [30:38] rod_rotate_velocities
+        """
+        obs = self._get_obs().copy()
+
+        # Flip ball Y position and velocity
+        obs[1] = -obs[1]   # ball_pos y
+        obs[4] = -obs[4]   # ball_vel vy
+
+        # Swap yellow (indices 0-3) and blue (indices 4-7) blocks in each rod group
+        for base in (6, 14, 22, 30):
+            y_block = obs[base:base + 4].copy()
+            b_block = obs[base + 4:base + 8].copy()
+            obs[base:base + 4]     = b_block
+            obs[base + 4:base + 8] = y_block
+
+        return obs
+
+    def _get_obs(self):
+        ball_pos, ball_vel = self._get_ball_obs()
+
+        rod_slide_positions = []
+        rod_slide_velocities = []
+        rod_rotate_positions = []
+        rod_rotate_velocities = []
+
+        # Uses cached addresses — zero mj_name2id calls
+        for i in range(len(self._rod_slide_qpos)):
+            rod_slide_positions.append(self.data.qpos[self._rod_slide_qpos[i]])
+            rod_slide_velocities.append(self.data.qvel[self._rod_slide_dof[i]])
+            rod_rotate_positions.append(self.data.qpos[self._rod_rot_qpos[i]])
+            rod_rotate_velocities.append(self.data.qvel[self._rod_rot_dof[i]])
+
+        obs = np.concatenate([
+            ball_pos,
+            ball_vel,
+            rod_slide_positions,
+            rod_slide_velocities,
+            rod_rotate_positions,
+            rod_rotate_velocities
+        ])
+
+        assert obs.shape == self.observation_space.shape, (
+            f"Observation shape {obs.shape} does not match observation space shape {self.observation_space.shape}"
+        )
+
+        return obs
+
+    def _adjust_antagonist_action(self, antagonist_action):
+        adjusted_action = -antagonist_action.copy()
+
+        return adjusted_action
+
+    # ── Virtual-kick engine ────────────────────────────────────────────────────
+    def _apply_virtual_kicks(self):
+        """If a foosman is within KICK_RADIUS of the ball *and* its rod is
+        rotated in the valid kick window [KICK_MIN_ROT, KICK_MAX_ROT], inject
+        a velocity impulse into the ball.
+        Yellow kicks toward +Y (opponent goal), blue toward −Y.
+        One kick per step max; shared cooldown.
+
+        [v3] Rotation is capped at ±π/2.  KICK_MAX_ROT (≈60°) ensures kicks
+        only fire while the foosman foot is still in the downswing and can
+        physically reach the ball — not when the rod is nearly horizontal and
+        the foot is floating in the air at ±90°.
+        """
+        if self._kick_cooldown > 0:
+            self._kick_cooldown -= 1
+            return
+
+        ball_xy = self.data.body(self._ball_bid).xpos[:2]
+
+        for kick_dir, rot_qpos, guys in self._kick_rods:
+            rot_angle = self.data.qpos[rot_qpos]
+            abs_rot = abs(rot_angle)
+            # Only kick during the valid swing window: foot must be low enough
+            if abs_rot < KICK_MIN_ROT or abs_rot > KICK_MAX_ROT:
+                continue
+            for gid in guys:
+                guy_xy = self.data.body(gid).xpos[:2]
+                dist   = np.linalg.norm(ball_xy - guy_xy)
+                if dist < KICK_RADIUS:
+                    strength = min(abs_rot, KICK_MAX_ROT) / KICK_MAX_ROT
+                    impulse  = KICK_SPEED * strength * (1.0 - dist / KICK_RADIUS)
+                    self.data.qvel[self._by_dof] += kick_dir * impulse
+                    self.data.qvel[self._bx_dof] += (ball_xy[0] - guy_xy[0]) * 1.5
+                    self._kick_cooldown = KICK_COOLDOWN
+                    return
+
+    def euclidean_goal_distance(self, x, y):
+        return math.sqrt((x - 0) ** 2 + (y - TABLE_MAX_Y_DIM) ** 2)
+
+    # ── Wall-bounce engine (sides + ends) ───────────────────────────────────────────────
+    def _apply_wall_bounces(self):
+        """Bounce the ball off side walls (±WALL_X) and end walls (±WALL_Y).
+        End walls have a goal opening (|ball_x| < GOAL_HALF_WIDTH) that lets
+        the ball through.  All wall geoms are above the ball plane, so bounces
+        are handled in code."""
+        ball_world_x = self.data.body(self._ball_bid).xpos[0]
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+
+        # ── Side-wall bounces (left/right, ±WALL_X) ─────────────────────────
+        vel_x = self.data.qvel[self._bx_dof]
+        if ball_world_x > WALL_X and vel_x > 0:
+            self.data.qvel[self._bx_dof] = -abs(vel_x) * WALL_RESTITUTION
+            overshoot = ball_world_x - WALL_X
+            self.data.qpos[self._bx_qpos] -= overshoot + 0.3
+        elif ball_world_x < -WALL_X and vel_x < 0:
+            self.data.qvel[self._bx_dof] = abs(vel_x) * WALL_RESTITUTION
+            overshoot = -WALL_X - ball_world_x
+            self.data.qpos[self._bx_qpos] += overshoot + 0.3
+
+        # ── End-wall bounces (top/bottom, ±WALL_Y) ──────────────────────────
+        if abs(ball_world_y) >= WALL_Y:
+            # Inside goal opening — let the ball through (goal scored)
+            if abs(ball_world_x) < GOAL_HALF_WIDTH:
+                return
+            vel_y = self.data.qvel[self._by_dof]
+            if ball_world_y > WALL_Y and vel_y > 0:
+                self.data.qvel[self._by_dof] = -abs(vel_y) * WALL_RESTITUTION
+                overshoot = ball_world_y - WALL_Y
+                self.data.qpos[self._by_qpos] -= overshoot + 0.5
+            elif ball_world_y < -WALL_Y and vel_y < 0:
+                self.data.qvel[self._by_dof] = abs(vel_y) * WALL_RESTITUTION
+                overshoot = -WALL_Y - ball_world_y
+                self.data.qpos[self._by_qpos] += overshoot + 0.5
+
+    # ── Reward function ────────────────────────────────────────────────────────
+    def compute_reward(self, protagonist_action):
+        """Reward that encourages BOTH attacking and defensive play.
+
+        Components:
+          1. Goals scored / conceded         (±5000, terminal)
+          2. Ball position toward opp goal   (continuous)
+          3. Ball engagement — closest guy   (anti-sitting)
+          4. Offensive play — atk/mid near ball in opp half
+          5. Defensive play — def/gk near ball in own half
+          6. Shooting — ball velocity toward opp goal
+          7. Danger — ball flying toward own goal deep in own half
+          8. Ball activity — reward motion
+          9. Time + ctrl penalties
+        """
+        ball_pos, ball_vel = self._get_ball_obs()
+        ball_speed = math.sqrt(ball_vel[0] ** 2 + ball_vel[1] ** 2)
+
+        ball_world = self.data.body(self._ball_bid).xpos
+        ball_world_x = ball_world[0]
+        ball_world_y = ball_world[1]
+        ball_xy = ball_world[:2]
+
+        # ── 1. GOALS — dominant terminal signal ──────────────────────────────
+        in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
+        if ball_world_y > TABLE_MAX_Y_DIM and in_goal_opening:
+            return 5000.0    # yellow scored
+        if ball_world_y < -TABLE_MAX_Y_DIM and in_goal_opening:
+            return -5000.0   # conceded
+
+        # ── 2. BALL POSITION — push ball toward opponent goal ─────────────────
+        position_reward = (ball_world_y / TABLE_MAX_Y_DIM) * 1.0
+
+        # ── 3. BALL ENGAGEMENT — closest yellow foosman to ball ──────────────
+        min_dist = 999.0
+        for gid in self._yellow_guy_bids:
+            dx = ball_xy[0] - self.data.body(gid).xpos[0]
+            dy = ball_xy[1] - self.data.body(gid).xpos[1]
+            d = math.sqrt(dx * dx + dy * dy)
+            if d < min_dist:
+                min_dist = d
+        engagement_reward = max(0.0, 2.0 * (1.0 - min_dist / 10.0))
+
+        # ── 4. OFFENSIVE PLAY — attack/mid guys near ball in opponent half ───
+        attack_reward = 0.0
+        if ball_world_y > 0:
+            radius = KICK_RADIUS * 1.5
+            for gid in self._yellow_atk_bids:
+                dx = ball_xy[0] - self.data.body(gid).xpos[0]
+                dy = ball_xy[1] - self.data.body(gid).xpos[1]
+                d = math.sqrt(dx * dx + dy * dy)
+                if d < radius:
+                    attack_reward = max(attack_reward,
+                                        1.5 * (1.0 - d / radius))
+
+        # ── 5. DEFENSIVE PLAY — goalie/def guys near ball in own half ────────
+        defense_reward = 0.0
+        if ball_world_y < 0:
+            radius = KICK_RADIUS * 1.5
+            for gid in self._yellow_def_bids:
+                dx = ball_xy[0] - self.data.body(gid).xpos[0]
+                dy = ball_xy[1] - self.data.body(gid).xpos[1]
+                d = math.sqrt(dx * dx + dy * dy)
+                if d < radius:
+                    defense_reward = max(defense_reward,
+                                         1.5 * (1.0 - d / radius))
+
+        # ── 6. SHOOTING — reward ball velocity toward opponent goal ──────────
+        shooting_reward = 0.0
+        if ball_world_y > 0 and ball_vel[1] > 0:
+            proximity = ball_world_y / TABLE_MAX_Y_DIM  # 0..1
+            shooting_reward = min(ball_vel[1] * 0.1 * (0.5 + proximity), 3.0)
+
+        # ── 7. DANGER — penalise ball moving toward own goal in own half ─────
+        danger_penalty = 0.0
+        if ball_world_y < -TABLE_MAX_Y_DIM * 0.4 and ball_vel[1] < 0:
+            depth = abs(ball_world_y) / TABLE_MAX_Y_DIM  # 0.4..1.0
+            danger_penalty = ball_vel[1] * 0.15 * depth   # negative number
+
+        # ── 8. BALL ACTIVITY — reward motion (anti-stall) ────────────────────
+        activity_reward = min(ball_speed * 0.03, 0.5)
+
+        # ── 9. PENALTIES ─────────────────────────────────────────────────────
+        time_penalty = -0.2
+        ctrl_cost = self.control_cost(protagonist_action)
+
+        reward = (position_reward
+                  + engagement_reward
+                  + attack_reward + defense_reward
+                  + shooting_reward + danger_penalty
+                  + activity_reward
+                  + time_penalty
+                  - ctrl_cost)
+        return reward
+
+    @property
+    def healthy_reward(self):
+        return (
+                float(self.is_healthy or self._terminate_when_unhealthy)
+                * self._healthy_reward
+        )
+
+    def control_cost(self, action):
+        control_cost = self._ctrl_cost_weight * np.sum(np.abs(action))
+        return control_cost
+
+    @property
+    def is_healthy(self):
+        ball_y = self._get_ball_obs()[0][1]
+        min_y, max_y = self._healthy_z_range
+        is_healthy = min_y < ball_y < max_y
+
+        return is_healthy
+
+    def _is_ball_moving(self):
+        ball_pos, ball_vel = self._get_ball_obs()
+
+        return np.linalg.norm(ball_vel) > 0.05
+
+    def _determine_progression(self):
+        ball_y = self._get_ball_obs()[0][1]
+
+        if self.prev_ball_y is not None:
+            if ball_y > self.prev_ball_y:
+                self.no_progress_steps = 0
+            else:
+                self.no_progress_steps += 1
+
+        self.prev_ball_y = ball_y
+
+    @property
+    def terminated(self):
+        self._determine_progression()
+
+        self.ball_stopped_count = 0 if self._is_ball_moving() else self.ball_stopped_count + 1
+        ball_stagnant = self.ball_stopped_count >= BALL_STOPPED_COUNT_THRESHOLD
+
+        over_max_steps = self._step_count >= MAX_EPISODE_STEPS
+
+        unhealthy = not self.is_healthy
+        no_progress = self.no_progress_steps >= self.max_no_progress_steps
+
+        ball_world_y = self.data.body(self._ball_bid).xpos[1]
+        ball_world_x = self.data.body(self._ball_bid).xpos[0]
+        in_goal_opening = abs(ball_world_x) < GOAL_HALF_WIDTH
+        goal_scored = (ball_world_y < -TABLE_MAX_Y_DIM or ball_world_y > TABLE_MAX_Y_DIM) and in_goal_opening
+
+        terminated = (
+                unhealthy or (no_progress and not self.play_until_goal)
+                or ball_stagnant or over_max_steps or goal_scored
+        ) if self._terminate_when_unhealthy else False
+
+        return terminated

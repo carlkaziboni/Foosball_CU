@@ -1,0 +1,348 @@
+<mujoco>
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <asset>
+      <mesh name="guy" file="asset/foosman/mesh_down_foosman.obj" scale='0.07 0.07 0.07'/>
+      <mesh name="handle" file="asset/handle/foosball_handle.obj" scale='0.1 0.1 0.1'/>
+    </asset>
+
+    <option sdf_iterations="20" sdf_initpoints="40">
+      <flag contact="enable"/>
+    </option>
+
+    <visual>
+      <map force="1000"/>
+    </visual>
+
+    <statistic meansize="0.2"/>
+
+    <default>
+      <geom solref="0.004 1" solimp=".99 .99 .00001" condim="4"/>
+    </default>
+
+    <include file="foosball_scene.xml"/>
+
+    <!--
+      ═══════════════════════════════════════════════════════════════════════
+      v3 changes vs v2:
+        - Rotation joint range: ±180° → ±90°  (foosmen cannot go upside down)
+        - Rotation actuator ctrlrange: ±2.5 → ±1.57 rad (π/2)
+        - Asset paths reference ../v2/asset/ (no duplication)
+
+      Real table dimensions (cm, 1 unit = 1 cm):
+        Width: 48.5   Length: 81   Height: 6
+        Goal width: 8   Ball diameter: 2.5   Bar height: 4.8
+        Formation: 1 (goalie) — 3 (defense) — 4 (midfield) — 3 (attack)
+        Bar gap: 9.5   Bar-to-wall gap: 7.25 (adjusted to sum to 81)
+        3-player spacing: 15   4-player spacing: 10.2
+        Goalie bumper gap: 32
+
+      Rod Y positions (from Yellow end -40.5 to Blue end +40.5):
+        Y goalie  -33.25   Y defense  -23.75   B attack  -14.25
+        Y midfield -4.75   B midfield   4.75   Y attack   14.25
+        B defense  23.75   B goalie    33.25
+      ═══════════════════════════════════════════════════════════════════════
+    -->
+
+    <worldbody>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         YELLOW TEAM  (Y-negative end)
+         Formation: 1 goalie — 3 defense — 4 midfield — 3 attack
+         ═══════════════════════════════════════════════════════════════════ -->
+
+      <!-- Yellow Goalie Rod — 1 player, Y=-33.25 -->
+      <body name="y_goal_rod" pos="0 -33.25 4.8" euler="0 90 0">
+        <joint name="y_goal_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="y_goal_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.8" diaginertia="50 50 0.03"/>
+        <geom name="y_goal_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <!-- Handle -->
+        <body name="y_goal_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
+        </body>
+        <!-- Rubber bumpers (goalie gap = 32cm → bumpers at ±16) -->
+        <body name="y_goal_rod_r_rubber" pos="0 0 -16" euler="0 0 90">
+          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
+          <geom name="y_goal_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
+        </body>
+        <body name="y_goal_rod_l_rubber" pos="0 0 16" euler="0 0 90">
+          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
+          <geom name="y_goal_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
+        </body>
+        <!-- 1 Yellow Goalkeeper -->
+        <body name="y_goal_guy1" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_goal_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_goal_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Yellow Defense Rod — 3 players @ 15cm spacing, Y=-23.75 -->
+      <body name="y_def_rod" pos="0 -23.75 4.8" euler="0 90 0">
+        <joint name="y_def_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="y_def_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
+        <geom name="y_def_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_def_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
+        </body>
+
+<!-- 3 Yellow Defenders (spacing 15cm: -15, 0, +15) -->
+        <body name="y_def_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_def_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_def_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_def_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_def_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_def_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_def_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_def_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_def_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Yellow Midfield Rod — 4 players @ 10.2cm spacing, Y=-4.75 -->
+      <body name="y_mid_rod" pos="0 -4.75 4.8" euler="0 90 0">
+        <joint name="y_mid_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="y_mid_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.85" diaginertia="55 55 0.032"/>
+        <geom type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_mid_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
+        </body>
+
+<!-- 4 Yellow Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
+        <body name="y_mid_guy1" pos="0.284 -0.05 -15.3" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_mid_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_mid_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_mid_guy2" pos="0.284 -0.05 -5.1" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_mid_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_mid_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_mid_guy3" pos="0.284 -0.05 5.1" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_mid_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_mid_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_mid_guy4" pos="0.284 -0.05 15.3" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_mid_guy4_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_mid_guy4" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Yellow Attack Rod — 3 players @ 15cm spacing, Y=14.25 -->
+      <body name="y_attack_rod" pos="0 14.25 4.8" euler="0 90 0">
+        <joint name="y_attack_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="y_attack_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
+        <geom name="y_attack_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="y_attack_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.7 0.7 0.0 1'/>
+        </body>
+
+<!-- 3 Yellow Attackers (spacing 15cm: -15, 0, +15) -->
+        <body name="y_attack_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_attack_guy1_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_attack_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_attack_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_attack_guy2_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_attack_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="y_attack_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="y_attack_guy3_visual" mesh="guy" rgba="0.95 0.95 0.0 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="y_attack_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.95 0.95 0.0 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         BLUE TEAM  (Y-positive end)
+         Formation: 1 goalie — 3 defense — 4 midfield — 3 attack
+         ═══════════════════════════════════════════════════════════════════ -->
+
+      <!-- Blue Goalie Rod — 1 player, Y=33.25 -->
+      <body name="b_goal_rod" pos="0 33.25 4.8" euler="0 -90 180">
+        <joint name="b_goal_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="b_goal_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.8" diaginertia="50 50 0.03"/>
+        <geom name="b_goal_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_goal_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
+        </body>
+        <body name="b_goal_rod_r_rubber" pos="0 0 -16" euler="0 0 90">
+          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
+          <geom name="b_goal_rod_r_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
+        </body>
+        <body name="b_goal_rod_l_rubber" pos="0 0 16" euler="0 0 90">
+          <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.003"/>
+          <geom name="b_goal_rod_l_rubber" type="cylinder" friction="0.1" size="1.2 1.0" rgba="0.0 0.0 0.0 1"/>
+        </body>
+        <!-- 1 Blue Goalkeeper -->
+        <body name="b_goal_guy1" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_goal_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_goal_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Blue Defense Rod — 3 players @ 15cm spacing, Y=23.75 -->
+      <body name="b_def_rod" pos="0 23.75 4.8" euler="0 -90 180">
+        <joint name="b_def_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="b_def_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
+        <geom name="b_def_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_def_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
+        </body>
+
+<!-- 3 Blue Defenders (spacing 15cm: -15, 0, +15) -->
+        <body name="b_def_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_def_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_def_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_def_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_def_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_def_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_def_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_def_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_def_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Blue Midfield Rod — 4 players @ 10.2cm spacing, Y=4.75 -->
+      <body name="b_mid_rod" pos="0 4.75 4.8" euler="0 -90 180">
+        <joint name="b_mid_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="b_mid_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.85" diaginertia="55 55 0.032"/>
+        <geom name="b_mid_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_mid_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
+        </body>
+
+<!-- 4 Blue Midfielders (spacing 10.2cm: -15.3, -5.1, +5.1, +15.3) -->
+        <body name="b_mid_guy1" pos="0.284 -0.05 -15.3" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_mid_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_mid_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_mid_guy2" pos="0.284 -0.05 -5.1" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_mid_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_mid_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_mid_guy3" pos="0.284 -0.05 5.1" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_mid_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_mid_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_mid_guy4" pos="0.284 -0.05 15.3" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_mid_guy4_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_mid_guy4" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- Blue Attack Rod — 3 players @ 15cm spacing, Y=-14.25 -->
+      <body name="b_attack_rod" pos="0 -14.25 4.8" euler="0 -90 180">
+        <joint name="b_attack_linear" type="slide" axis="0 0 1" range="-12 12"/>
+        <joint name="b_attack_rotation" type="hinge" axis="0 0 1" range="-90.0 90.0"/>
+        <inertial pos="0 0 0" mass="0.9" diaginertia="60 60 0.035"/>
+        <geom name="b_attack_rod" type="cylinder" size="0.5 37" pos="0 0 0" rgba="0.8 0.8 0.8 1"/>
+        <body name="b_attack_rod_handle" pos="0 0 38" euler="180 0 0">
+          <geom type="mesh" mesh="handle" mass='0.01' rgba='0.1 0.1 0.1 1'/>
+        </body>
+
+<!-- 3 Blue Attackers (spacing 15cm: -15, 0, +15) -->
+        <body name="b_attack_guy1" pos="0.284 -0.05 -15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_attack_guy1_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_attack_guy1" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_attack_guy2" pos="0.284 -0.05 0" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_attack_guy2_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_attack_guy2" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+        <body name="b_attack_guy3" pos="0.284 -0.05 15" euler="180 -90 0">
+          <inertial pos="0 0 0" mass="0.07" diaginertia="0.001 0.001 0.001"/>
+          <geom type="mesh" name="b_attack_guy3_visual" mesh="guy" rgba="0.05 0.05 0.05 1" contype="0" conaffinity="0" group="2"/>
+          <geom type="capsule" name="b_attack_guy3" size="1.0 2.0" pos="0 0 -1.0" rgba="0.05 0.05 0.05 0.3" friction="0.5 0.005 0.0001"/>
+        </body>
+      </body>
+
+      <!-- MATCH BALL — diameter 2.5cm, rests on playing surface (Z=0) -->
+      <body name="ball" pos="0 -4 1.25">
+        <joint name="ball_x" type="slide" axis="1 0 0" frictionloss="20"/>
+        <joint name="ball_y" type="slide" axis="0 1 0" frictionloss="20"/>
+        <geom name="ball" type="sphere" size="1.25" mass="0.1" rgba="0.8 0.3 0.5 1"
+              friction="0.01 0.1 10"/>
+      </body>
+
+    </worldbody>
+
+    <!-- Exclude contact between side rubbers and rods -->
+    <contact>
+      <exclude body1="table_side_rubber_y_goal_r" body2="y_goal_rod"/>
+      <exclude body1="table_side_rubber_y_goal_l" body2="y_goal_rod"/>
+      <exclude body1="table_side_rubber_y_def_r" body2="y_def_rod"/>
+      <exclude body1="table_side_rubber_y_def_l" body2="y_def_rod"/>
+      <exclude body1="table_side_rubber_y_mid_r" body2="y_mid_rod"/>
+      <exclude body1="table_side_rubber_y_mid_l" body2="y_mid_rod"/>
+      <exclude body1="table_side_rubber_y_attack_r" body2="y_attack_rod"/>
+      <exclude body1="table_side_rubber_y_attack_l" body2="y_attack_rod"/>
+
+      <exclude body1="table_side_rubber_b_goal_r" body2="b_goal_rod"/>
+      <exclude body1="table_side_rubber_b_goal_l" body2="b_goal_rod"/>
+      <exclude body1="table_side_rubber_b_def_r" body2="b_def_rod"/>
+      <exclude body1="table_side_rubber_b_def_l" body2="b_def_rod"/>
+      <exclude body1="table_side_rubber_b_mid_r" body2="b_mid_rod"/>
+      <exclude body1="table_side_rubber_b_mid_l" body2="b_mid_rod"/>
+      <exclude body1="table_side_rubber_b_attack_r" body2="b_attack_rod"/>
+      <exclude body1="table_side_rubber_b_attack_l" body2="b_attack_rod"/>
+    </contact>
+
+    <!-- Position-servo actuators: ctrlrange limited to ±1.57 rad (π/2) for v3 -->
+    <actuator>
+      <position name="y_goal_linear" joint="y_goal_linear" ctrlrange="-8.25 8.25" kp="20000" kv="300"/>
+      <position name="y_goal_rotation" joint="y_goal_rotation" ctrlrange="-1.57 1.57" kp="70000" kv="1000"/>
+      <position name="y_def_linear" joint="y_def_linear" ctrlrange="-9.25 9.25" kp="10000" kv="200"/>
+      <position name="y_def_rotation" joint="y_def_rotation" ctrlrange="-1.57 1.57" kp="40000" kv="500"/>
+      <position name="y_mid_linear" joint="y_mid_linear" ctrlrange="-8.95 8.95" kp="40000" kv="500"/>
+      <position name="y_mid_rotation" joint="y_mid_rotation" ctrlrange="-1.57 1.57" kp="150000" kv="2000"/>
+      <position name="y_attack_linear" joint="y_attack_linear" ctrlrange="-9.25 9.25" kp="20000" kv="300"/>
+      <position name="y_attack_rotation" joint="y_attack_rotation" ctrlrange="-1.57 1.57" kp="70000" kv="1000"/>
+
+      <position name="b_goal_linear" joint="b_goal_linear" ctrlrange="-8.25 8.25" kp="20000" kv="300"/>
+      <position name="b_goal_rotation" joint="b_goal_rotation" ctrlrange="-1.57 1.57" kp="70000" kv="1000"/>
+      <position name="b_def_linear" joint="b_def_linear" ctrlrange="-9.25 9.25" kp="10000" kv="200"/>
+      <position name="b_def_rotation" joint="b_def_rotation" ctrlrange="-1.57 1.57" kp="40000" kv="500"/>
+      <position name="b_mid_linear" joint="b_mid_linear" ctrlrange="-8.95 8.95" kp="40000" kv="500"/>
+      <position name="b_mid_rotation" joint="b_mid_rotation" ctrlrange="-1.57 1.57" kp="150000" kv="2000"/>
+      <position name="b_attack_linear" joint="b_attack_linear" ctrlrange="-9.25 9.25" kp="20000" kv="300"/>
+      <position name="b_attack_rotation" joint="b_attack_rotation" ctrlrange="-1.57 1.57" kp="70000" kv="1000"/>
+    </actuator>
+
+  </mujoco>

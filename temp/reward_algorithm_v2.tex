@@ -1,0 +1,68 @@
+% Temporary LaTeX snippet for Foosball v2 reward algorithm
+% Requires: \usepackage{algorithm,algorithmic}
+
+\begin{algorithm}[ht]
+\begin{algorithmic}
+	\STATE {\bfseries Input:} action $a$, ball state $(b_x,b_y,v_x,v_y)$, yellow sets $\mathcal{Y},\mathcal{Y}_{atk},\mathcal{Y}_{def}$
+	\STATE {\bfseries Constants:} $T=\mathrm{TABLE\_MAX\_Y\_DIM}$, $G=\mathrm{GOAL\_HALF\_WIDTH}$, $R=1.5\cdot\mathrm{KICK\_RADIUS}$
+	\STATE $s \leftarrow \sqrt{v_x^2+v_y^2}$
+	\IF{$(b_y>T)$ and $(|b_x|<G)$}
+		\STATE \textbf{return} $5000.0$ \COMMENT{yellow scored}
+	\ENDIF
+	\IF{$(b_y<-T)$ and $(|b_x|<G)$}
+		\STATE \textbf{return} $-5000.0$ \COMMENT{yellow conceded}
+	\ENDIF
+
+	\STATE $r_{pos} \leftarrow b_y/T$
+
+	\STATE $d_{\min} \leftarrow +\infty$
+	\FORALL{$g \in \mathcal{Y}$}
+		\STATE $d \leftarrow \lVert (b_x,b_y) - (x_g,y_g) \rVert_2$
+		\IF{$d < d_{\min}$}
+			\STATE $d_{\min} \leftarrow d$
+		\ENDIF
+	\ENDFOR
+	\STATE $r_{eng} \leftarrow \max\left(0,\;2\left(1-\frac{d_{\min}}{10}\right)\right)$
+
+	\STATE $r_{atk} \leftarrow 0$
+	\IF{$b_y>0$}
+		\FORALL{$g \in \mathcal{Y}_{atk}$}
+			\STATE $d \leftarrow \lVert (b_x,b_y) - (x_g,y_g) \rVert_2$
+			\IF{$d < R$}
+				\STATE $r_{atk} \leftarrow \max\left(r_{atk},\;1.5\left(1-\frac{d}{R}\right)\right)$
+			\ENDIF
+		\ENDFOR
+	\ENDIF
+
+	\STATE $r_{def} \leftarrow 0$
+	\IF{$b_y<0$}
+		\FORALL{$g \in \mathcal{Y}_{def}$}
+			\STATE $d \leftarrow \lVert (b_x,b_y) - (x_g,y_g) \rVert_2$
+			\IF{$d < R$}
+				\STATE $r_{def} \leftarrow \max\left(r_{def},\;1.5\left(1-\frac{d}{R}\right)\right)$
+			\ENDIF
+		\ENDFOR
+	\ENDIF
+
+	\STATE $r_{shoot} \leftarrow 0$
+	\IF{$(b_y>0)$ and $(v_y>0)$}
+		\STATE $p \leftarrow b_y/T$
+		\STATE $r_{shoot} \leftarrow \min\left(v_y\cdot0.1\cdot(0.5+p),\;3.0\right)$
+	\ENDIF
+
+	\STATE $r_{danger} \leftarrow 0$
+	\IF{$(b_y<-0.4T)$ and $(v_y<0)$}
+		\STATE $q \leftarrow |b_y|/T$
+		\STATE $r_{danger} \leftarrow v_y\cdot0.15\cdot q$
+	\ENDIF
+
+	\STATE $r_{act} \leftarrow \min(0.03s,\;0.5)$
+	\STATE $r_{time} \leftarrow -0.2$
+	\STATE $c(a) \leftarrow w\sum_i |a_i|$ \COMMENT{$w=\_ctrl\_cost\_weight$}
+
+	\STATE $r \leftarrow r_{pos}+r_{eng}+r_{atk}+r_{def}+r_{shoot}+r_{danger}+r_{act}+r_{time}-c(a)$
+	\STATE \textbf{return} $r$
+\end{algorithmic}
+\caption{Foosball v2 Reward Function ($\texttt{compute\_reward}$)}
+\label{alg:foosball_v2_reward}
+\end{algorithm}
